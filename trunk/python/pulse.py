@@ -103,8 +103,7 @@ class Pulse:
         """Return numpy array of off-pulse regions concatenated
             together.
         """
-       return get_data(self.off_pulse) 
-        off_pulse_data = [
+        return get_data(self.off_pulse) 
 
 
     def make_copy(self):
@@ -175,19 +174,19 @@ class Pulse:
         
 
     def is_masked(self, numchunks=5):
-    """Break pulse profile into 'numchunks'. Check each chunk
-        if it is flat (max value == min value). If it is then
-        profile is partially masked, return True. Otherwise
-        return False.
-    """
-    edges = np.round(np.linspace(0, self.profile.size, numchunks+1))
-    for i in range(0,N):
-        if self.profile[edges[i]:edges[i+1]].ptp() == 0:
-            # Current section of profile is flat.
-            # Profile is partially flat.
-            return True
-    # No section of profile is flat.
-    return False
+        """Break pulse profile into 'numchunks'. Check each chunk
+            if it is flat (max value == min value). If it is then
+            profile is partially masked, return True. Otherwise
+            return False.
+        """
+        edges = np.round(np.linspace(0, self.profile.size, numchunks+1))
+        for i in range(0,N):
+            if self.profile[edges[i]:edges[i+1]].ptp() == 0:
+                # Current section of profile is flat.
+                # Profile is partially flat.
+                return True
+        # No section of profile is flat.
+        return False
 
 
 class OnPulseRegionError(Exception):
