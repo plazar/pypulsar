@@ -12,7 +12,7 @@ import numpy as np
 import scipy.signal
 
 class Pulse:
-    def __init__(self, number, mjd, time, durration, profile, on_pulse_regions=None):
+    def __init__(self, number, mjd, time, duration, profile, on_pulse_regions=None):
         """Create a pulse object. Arguments provided are:
             - number: The pulse number (for example, counted from
                         beginning of an observation.)
@@ -33,12 +33,12 @@ class Pulse:
         self.duration = duration
         self.profile = profile.flatten()
         self.N = profile.size # number of samples in the profile
-        self.set_on_pulse_regions(on_pulse_regions) # list of 2-tuples defining
-                                                    # on-pulse regions
+        if on_pulse_regions is not None:
+            self.set_onoff_pulse_regions(on_pulse_regions)
 
 
     def __str__(self):
-        return "Pulse #: %d\n\tMJD: %0.15f\n\tTime: %8.2f\n\tDuration: %8.4f" % \
+        return "Pulse #: %d\n\tMJD: %0.15f\n\tTime: %8.2f s\n\tDuration: %8.4f s" % \
                     (self.number, self.mjd, self.time, self.duration)
 
 
@@ -64,30 +64,40 @@ class Pulse:
             # Set off-pulse regions.
             # Be careful if on-pulse starts or ends at beginning
             # or end of rotational phase.
-            off_pulse = self.on_pulse.flatten()
+
+            # Flattened version of on_pulse will become off_pulse
+            off_pulse = self.on_pulse.flatten() 
             if off_pulse[0] == 0.0:
                 off_pulse = off_pulse[1:]
             else:
                 off_pulse = np.concatenate(([None], off_pulse))
-            if flattened_on_pulse[-1] == 1.0:
+            if off_pulse[-1] == 1.0:
                 off_pulse = off_pulse[:-1]
             else:
-                off_pulse = no.concatenate((off_pulse, [None]))
+                off_pulse = np.concatenate((off_pulse, [None]))
             off_pulse.shape = (off_pulse.size/2, 2)
             self.off_pulse = off_pulse
 
 
-    def get_data(self, regions):
+    def get_data(self, regions=None):
         """Return numpy array of data from 'regions' concatenated
             together. 'regions' is a list of 2-tuples. Each 2-tuples
             contains a region of data to extract measured in
             rotational phase (between 0.0 and 1.0).
         """
+        if len(regions) == 0 or regions is None:
+            regions = [(None, None)] # return all data
         data = []
         for (lo, hi) in regions:
-            lobin = int(self.N * lo)
-            hibin = int(self.N * hi)
-            if hibin >= lobin:
+            if lo is None:
+                lobin = None
+            else:
+                lobin = int(self.N * lo)
+            if hi is None:
+                hibin = None
+            else:
+                hibin = int(self.N * hi)
+            if lobin is not None and hibin is not None and hibin <= lobin:
                 raise OnPulseRegionError("lobin=%s, hibin=%s" % (lobin, hibin))
             data.append(self.profile[lobin:hibin])
         return np.concatenate(data)
@@ -97,13 +107,13 @@ class Pulse:
         """Return numpy array of on-pulse regions concatenated
             together.
         """
-        return get_data(self.on_pulse)
+        return self.get_data(self.on_pulse)
     
     def get_off_pulse(self):
         """Return numpy array of off-pulse regions concatenated
             together.
         """
-        return get_data(self.off_pulse) 
+        return self.get_data(self.off_pulse) 
 
 
     def make_copy(self):
@@ -135,9 +145,9 @@ class Pulse:
             NOTE: The profile attribute of 'self' will be modified.
         """
         if downfactor > 1:
-            self.N = self.N/downfactor*downfactor # New length of profile
-            self.profile = self.profile[:self.N]
-            self.profile.shape = (self.N/downfactor, downfactor)
+            self.profile = self.profile[:self.N/downfactor*downfactor]
+            self.N = int(self.N/downfactor) # New length of profile
+            self.profile.shape = (self.N, downfactor)
             self.profile = self.profile.sum(axis=1)
     
 
@@ -156,11 +166,16 @@ class Pulse:
         if smoothfactor > 1:
             kernel = np.ones(smoothfactor, dtype='float32') / \
                         np.sqrt(smoothfactor)
+            # Wrap profile around to avoid edge
+            # effects of the convolution
             #
-            # Do we want to wrap profile around to avoid edge
-            # effects of the convolution?
-            #
-            self.profile = scipy.signal.convolve(self.profile, kernel, 'same')
+            # NOTE: This isn't ideal because we're not dealing with a
+            #       folded profile. Each pulse is a unique piece of the
+            #       timeseries.
+            prof = np.concatenate([self.profile[-smoothfactor:], \
+                                self.profile, self.profile[:smoothfactor]])
+            smooth_prof = scipy.signal.convolve(prof, kernel, 'same')
+            self.profile = smooth_prof[smoothfactor:-smoothfactor]
 
 
     def detrend(self, numchunks=5):
@@ -180,7 +195,7 @@ class Pulse:
             return False.
         """
         edges = np.round(np.linspace(0, self.profile.size, numchunks+1))
-        for i in range(0,N):
+        for i in range(0,numchunks):
             if self.profile[edges[i]:edges[i+1]].ptp() == 0:
                 # Current section of profile is flat.
                 # Profile is partially flat.
@@ -197,4 +212,4 @@ class OnPulseRegionError(Exception):
 
 
     def __str__(self):
-        return "On-pulse region is ill-defined.", message
+        return "On-pulse region is ill-defined. %s" % self.message
