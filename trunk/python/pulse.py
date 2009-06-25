@@ -132,6 +132,8 @@ class Pulse:
             bins. ('downfactor' does not have to be a factor
             of the size of the profile. in this case the end
             of the profile will be truncated.)
+
+            NOTE: The profile attribute of 'self' will be modified.
         """
         if downfactor > 1:
             self.N = self.N/downfactor*downfactor # New length of profile
@@ -149,6 +151,8 @@ class Pulse:
 
             This bit of code is taken from Scott Ransom's
             PRESTO's single_pulse_search.py (line ~ 423).
+
+            NOTE: The profile attribute of 'self' will be modified.
         """
         if smoothfactor > 1:
             kernel = np.ones(smoothfactor, dtype='float32') / \
@@ -163,6 +167,8 @@ class Pulse:
     def detrend(self, numchunks=5):
         """Break profile into 'numchunks' and remove a linear trend
             from each chunk.
+
+            NOTE: The profile attribute of 'self' will be modified.
         """
         break_points = np.round(np.linspace(0, self.N, numchunks+1))
         self.profile = scipy.signal.detrend(self.profile, bp=break_points)
