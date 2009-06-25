@@ -10,6 +10,7 @@ import os.path
 import numpy as np
 import psr_utils
 import infodata
+import pulse
 
 # Define constants and default values
 DTYPE = 'float32'       # binary data in PRESTO's .dat files 
@@ -83,7 +84,7 @@ class Datfile:
         current_pulse = self.read_Tseconds(current_period)
         while current_pulse is not None:
             # yield (return) current pulse (and other information)
-            yield (pulse_number, current_mjd, current_obstime, \
+            yield pulse.Pulse(pulse_number, current_mjd, current_obstime, \
                     current_period, current_pulse)
             # Update pulse number, mjd, period and pulse
             pulse_number += 1
