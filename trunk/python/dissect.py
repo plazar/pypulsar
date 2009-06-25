@@ -81,6 +81,8 @@ def main():
 
     # Loop over pulses in timeseries. Examine pulses one at a time.
     good_pulses = []
+    snrs = []
+    notes = []
     for current_pulse in timeseries.pulses(get_period):
         current_pulse.set_onoff_pulse_regions([(options.on_pulse_start, \
                                                 options.on_pulse_end)])
@@ -93,12 +95,14 @@ def main():
             pulse.smooth(numbins)
             snr = get_snr(pulse)
             if snr > options.threshold:
-                print "Good pulse! #%d, factor=%d (SNR=%f)" % \
-                                    (pulse.number, numbins, snr)
+#                print "Good pulse! #%d, factor=%d (SNR=%f)" % \
+#                                    (pulse.number, numbins, snr)
                 good_pulses.append(current_pulse)
+                snrs.append(snr)
+                notes.append("smoothed by %3d bins" % numbins)
                 break
 
-    print_report(good_pulses)
+    print_report(good_pulses, snrs=snrs, notes=notes)
     if options.create_output_files:
         if options.create_text_files:
             write_pulses(good_pulses, timeseries)
@@ -120,18 +124,35 @@ def get_snr(pulse, uncertainty=1):
     copy_of_pulse = pulse.make_copy()
     copy_of_pulse.scale()
     snr = np.max(copy_of_pulse.get_on_pulse())
+    # snr = np.sum(copy_of_pulse.get_on_pulse())
     warnings.warn("Only checking on-pulse region for pulses.")
     return snr
 
 
-def print_report(pulses):
+def print_report(pulses, snrs=None, notes=None):
     """Print a report given the pulses provided.
     """
     print "Autopsy report:"
     print "\tNumber of good pulses found: %s" % len(pulses)
-    for pulse in pulses:
-        snr = get_snr(pulse)
-        print pulse, "(SNR: %f)" % snr
+    use_snrs = ""
+    use_notes = ""
+    if snrs is not None and len(snrs) == len(pulses):
+        use_snrs = "SNR"
+    if notes is not None and len(notes) == len(pulses):
+        use_notes = "Notes"
+    print "%s%s%s%s%s%s" % ("#".center(7), "MJD".center(15), \
+                                "Time".center(11), "Duration".center(13), \
+                                use_snrs.center(9), use_notes)
+    for i, pulse in enumerate(pulses):
+        sys.stdout.write(("%d" % pulse.number).center(7))
+        sys.stdout.write(("%5.4f" % pulse.mjd).center(15))
+        sys.stdout.write(("%5.2f" % pulse.time).center(11))
+        sys.stdout.write(("%2.4f" % pulse.duration).center(13))
+        if use_snrs:
+            sys.stdout.write(("%4.2f" % snrs[i]).center(9))
+        if use_notes:
+            sys.stdout.write("%s" % notes[i])
+        sys.stdout.write("\n")
    
 
 def plot_pulses(pulses, timeseries, downfactor=1):
