@@ -8,11 +8,14 @@ Pulsar pulse object.
 Patrick Lazarus, June 24, 2009
 """
 import copy
+import os.path
+import types
 import numpy as np
 import scipy.signal
 
 class Pulse:
-    def __init__(self, number, mjd, time, duration, profile, on_pulse_regions=None):
+    def __init__(self, number, mjd, time, duration, profile, \
+                    origfn, dt, on_pulse_regions=None):
         """Create a pulse object. Arguments provided are:
             - number: The pulse number (for example, counted from
                         beginning of an observation.)
@@ -23,6 +26,8 @@ class Pulse:
             - duration: Durration of the pulse (in seconds).
             - profile: A numpy array containing the raw pulse
                         profile (a slice of a timeseries).
+            - origfn: Name of data file the pulse originated from.
+            - dt: width of each profile bin (in seconds).
             - on_pulse_regions: A list of 2-tuples. Each tuple
                         defines an on-pulse region measured in
                         rotational phase (between 0.0 and 1.0).
@@ -33,8 +38,13 @@ class Pulse:
         self.duration = duration
         self.profile = profile.flatten()
         self.N = profile.size # number of samples in the profile
-        if on_pulse_regions is not None:
+        self.dt = dt # width of bin (in seconds)
+        self.origfn = origfn
+        if type(on_pulse_regions)==types.ListType and on_pulse_regions:
             self.set_onoff_pulse_regions(on_pulse_regions)
+        else:
+            self.on_pulse = None
+            self.off_pulse = None
 
 
     def __str__(self):
@@ -204,6 +214,61 @@ class Pulse:
         return False
 
 
+    def write_to_file(self):
+        """Dump the pulse to file.
+        """
+        #
+        # Assume original filename has an extension
+        # NOTE: This is probably not good to assume.
+        #
+        basefn, extension = os.path.splitext(self.origfn)
+        file = open("%s.prof%d" % (basefn, self.number), 'w')
+        file.write("# Original data file              = %s\n" % self.origfn)
+        file.write("# Pulse Number                    = %d\n" % self.number)
+        file.write("# MJD of start of pulse           = %0.15f\n" % self.mjd)
+        file.write("# Time into observation (seconds) = %f\n" % self.time)
+        file.write("# Duration of pulse (seconds)     = %0.15f\n" % self.duration)
+        file.write("# Profile bins                    = %d\n" % self.N)
+        file.write("# Width of profile bin (seconds)  = %g\n" % self.dt)
+        if self.on_pulse is not None:
+            for i, (lo,hi) in enumerate(self.on_pulse):
+                file.write("# On-pulse region %2d (phase)      = %f-%f\n" % \
+                                                                    (i,lo,hi))
+        file.write("###################################\n")
+        for i, val in enumerate(self.profile):
+            file.write("%-10d %f\n" % (i, val))
+        file.close()
+
+
+def read_pulse_from_file(filename):
+    """Read pulse information from 'filename' and
+        return a Pulse object.
+    """
+    file = open(filename, 'r')
+    profile = []
+    on_pulse_regions = []
+    for line in file.readlines():
+        if line.startswith("# Pulse Number"):
+            number = int(line.split('=')[-1].strip())
+        elif line.startswith("# MJD of start of pulse"):
+            mjd = float(line.split('=')[-1].strip())
+        elif line.startswith("# Time into observation (seconds)"):
+            time = float(line.split('=')[-1].strip())
+        elif line.startswith("# Duration of pulse (seconds)"):
+            duration = float(line.split('=')[-1].strip())
+        elif line.startswith("# On-pulse region"):
+            lo = float(line.split('=')[-1].split('-')[0].strip())
+            hi = float(line.split('=')[-1].split('-')[1].strip())
+            on_pulse_regions.append((lo,hi))
+        elif line.startswith("#"):
+            pass
+        else:
+            # Profile value
+            profile.append(float(line.split()[-1].strip()))
+    return Pulse(number, mjd, time, duration, np.array(profile), \
+                    on_pulse_regions)
+            
+            
 class OnPulseRegionError(Exception):
     """Error when on-pulse region is ill-defined.
     """

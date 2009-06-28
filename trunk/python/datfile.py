@@ -84,8 +84,10 @@ class Datfile:
         current_pulse = self.read_Tseconds(current_period)
         while current_pulse is not None:
             # yield (return) current pulse (and other information)
-            yield pulse.Pulse(pulse_number, current_mjd, current_obstime, \
-                    current_period, current_pulse)
+            yield pulse.Pulse(number=pulse_number, mjd=current_mjd, \
+                              time=current_obstime, duration=current_period, \
+                              profile=current_pulse, origfn=self.datfn, \
+                              dt=self.infdata.dt)
             # Update pulse number, mjd, period and pulse
             pulse_number += 1
             current_mjd += float(current_period) / psr_utils.SECPERDAY
