@@ -20,6 +20,7 @@ import optparse
 import warnings
 import numpy as np
 import datfile
+import mypolycos
 
 import ppgplot
 # Import matplotlib/pylab and set for non-interactive plots
@@ -30,27 +31,30 @@ import pylab as plt
 # Constants
 JOYDIV_SEP = 0.5    # vertical separation per profile in same units 
                     # profiles are plotted in for joydiv plot.
-DEFAULT_WIDTHS = [1,2,4,8,16,32]
+DEFAULT_WIDTHS = [1,2,4,8,16,32] # Powers of 2
+# DEFAULT_WIDTHS = [1,2,3,4,6,9,14,20,30] # Default from single_pulse_search.py
                     # default boxcar widths to use for smoothing
                     # when searching for pulses.
 
    
 
 def main():
+    # Open file
+    datfn = args[0]
+    timeseries = datfile.Datfile(datfn)
+
     if options.parfile is not None:
         # generate polycos
         # get periods from polycos
-        raise NotImplementedError("--use-parfile option in dissect.py is not implemented yet")
+        polycos = mypolycos.create_polycos(options.parfile, timeseries.infdata)
+        get_period = lambda mjd: 1.0/polycos.get_phs_and_freq(int(mjd), \
+                                                               mjd-int(mjd))[1]
     elif options.polycofile is not None:
         raise NotImplementedError("--use-polycos option in dissect.py is not implemented yet")
     elif options.period is not None:
         get_period = lambda mjd: options.period
     else:
         raise "Unknown option for reading periods!"
-
-    # Open file
-    datfn = args[0]
-    timeseries = datfile.Datfile(datfn)
 
     # Loop over pulses in timeseries. Examine pulses one at a time.
     good_pulses = []

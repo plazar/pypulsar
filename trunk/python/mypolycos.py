@@ -8,6 +8,7 @@ Patrick Lazarus, June 28th, 2009.
 import sys
 import os
 import subprocess
+import types
 import numpy as Num
 import parfile
 import psr_utils
@@ -139,18 +140,34 @@ class polycos:
         goodpoly = self.select_polyco(mjdi, mjdf)
         return self.polycos[goodpoly].doppler
 
-def create_polycos(parfn, infdata):
+def create_polycos(par, infdata):
     """Create polycos object from a parfile.
         Arguments:
-            - 'parfn': parfile's filename.
-            - 'infdata': infodata object.
+            - 'par': parfile's filename, or a parfile object.
+            - 'infdata': inffile's filename, or an infodata object.
     """
-    par = parfile.psr_par(parfn)
+    if type(par)==types.StringType:
+        # assume par is a filename
+        par = parfile.psr_par(par)
+    else:
+        # assume par is already a parfile.psr_par object
+        pass
+    if type(infdata)==types.StringType:
+        # assume infdata is a filename
+        infdata = infodata.infodata(infdata)
+    else:
+        # assume infdata is already an infodata.infodata object
+        pass
+    
     obslength = (infdata.dt*infdata.N) / psr_utils.SECPERDAY
     (telescope_id, max_hour_angle) = telescope_to_id_track[infdata.telescope]
     if telescope_id != 'o' and telescope_id !='@':
         center_freq = infdata.lofreq + (infdata.numchan/2 - 0.5) * \
                                             infdata.chan_width
+        if infdata.bary:
+            # Data is barycentred, keep max_hour_angle,
+            # but set telescope_id to barycentre, '@'
+            telescope_id = '@'
     else:
         # optical, X-ray, or gamma-ray data
         center_freq = 0.0
@@ -163,7 +180,7 @@ def create_polycos(parfn, infdata):
     tzfile.write("%s %d %d %d %0.5f\n" % (par.PSR, SPAN_DEFAULT, \
                         NUMCOEFFS_DEFAULT, max_hour_angle, center_freq)) 
     tzfile.close()
-    tempo = subprocess.Popen("tempo -z -f %s" % parfn, shell=True, \
+    tempo = subprocess.Popen("tempo -z -f %s" % par.FILE, shell=True, \
                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, \
                         stderr=subprocess.PIPE)
     (out, err) = tempo.communicate("%d %d\n" % (int(infdata.epoch), \
