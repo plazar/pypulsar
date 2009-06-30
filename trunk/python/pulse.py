@@ -40,7 +40,8 @@ class Pulse:
         self.N = profile.size # number of samples in the profile
         self.dt = dt # width of bin (in seconds)
         self.origfn = origfn
-        if type(on_pulse_regions)==types.ListType and on_pulse_regions:
+        if (type(on_pulse_regions)==types.ListType or \
+                type(on_pulse_regions)==np.ndarray) and len(on_pulse_regions):
             self.set_onoff_pulse_regions(on_pulse_regions)
         else:
             self.on_pulse = None
@@ -48,7 +49,7 @@ class Pulse:
 
 
     def __str__(self):
-        return "Pulse #: %d\n\tMJD: %0.15f\n\tTime: %8.2f s\n\tDuration: %8.4f s" % \
+        return "Pulse #: %s\n\tMJD: %0.15f\n\tTime: %8.2f s\n\tDuration: %8.4f s\n" % \
                     (self.number, self.mjd, self.time, self.duration)
 
 
@@ -95,7 +96,7 @@ class Pulse:
             contains a region of data to extract measured in
             rotational phase (between 0.0 and 1.0).
         """
-        if len(regions) == 0 or regions is None:
+        if regions is None or len(regions) == 0:
             regions = [(None, None)] # return all data
         data = []
         for (lo, hi) in regions:
@@ -159,7 +160,7 @@ class Pulse:
             self.N = int(self.N/downfactor) # New length of profile
             self.profile.shape = (self.N, downfactor)
             self.profile = self.profile.sum(axis=1)
-    
+            self.dt *= downfactor 
 
     def smooth(self, smoothfactor=1):
         """Smooth profile by convolving with tophat of width
@@ -240,6 +241,149 @@ class Pulse:
         file.close()
 
 
+    def __add__(self, other):
+        """Add two Pulse objects.
+        """
+        if hasattr(other, 'pulse_registry'):
+            # Other is a SummedPulse object. Use SummedPulse's __iadd__ method.
+            summed_pulse = other.make_copy()
+        else:
+            summed_pulse = SummedPulse(other.number, other.mjd, other.time, \
+                                other.duration, other.profile, other.origfn, \
+                                other.dt, other.on_pulse)
+        summed_pulse += self
+        return summed_pulse
+
+
+class SummedPulse(Pulse):
+    """Object to keep track of sum of multiple pulses.
+        Sub-class of Pulse.
+
+        SummedPulse is very similar to Pulse except it
+        keeps track of what pulses have been summed.
+    """
+    def __init__(self, number, mjd, time, duration, profile, \
+                    origfn, dt, on_pulse_regions=None, 
+                    init_registry=None, init_count=1):
+        # Call superclass' constructor
+        Pulse.__init__(self, number, mjd, time, duration, profile, \
+                    origfn, dt, on_pulse_regions)
+        # Initialize registry to keep track of what pulses are summed
+        if init_registry is not None:
+            self.pulse_registry = init_registry
+        else:
+            self.pulse_registry = {origfn: [number]}
+        self.count = init_count
+
+    def __iadd__(self, other):
+        """Sum other with self as self.
+            Other can be a SummedPulse or a Pulse.
+        """
+        if self.dt != other.dt:
+            raise "Incompatible binwidths!... need proper exception"
+        if hasattr(other, 'pulse_registry'):
+            # Merge other's registry into self's registry
+            # If there is a conflict, pulse is included in
+            # self and other, then raise an Exception.
+            for fn in other.pulse_registry.keys():
+                if fn in self.pulse_registry.keys():
+                    for num in other.pulse_registry[fn]:
+                        if num in self.pulse_registry[fn]:
+                            # Conflict
+                            raise "Conflict exception... need proper exception"
+                        else:
+                            self.pulse_registry[fn].append(num)
+                else:
+                    # Use slice to make copy of other's entry in registry
+                    self.pulse_registry[fn] = other.pulse_registry[fn][:]
+            ocount = other.count
+        else:
+            # 'other' is a Pulse, not SummedPulse
+            if other.origfn in self.pulse_registry.keys():
+                self.pulse_registry[other.origfn].append(other.number)
+            else:
+                self.pulse_registry[other.origfn] = [other.number]
+            ocount = 1
+       
+        # Prepare profiles for summing
+        self.scale()
+        copy_of_other = other.make_copy()
+        copy_of_other.scale()
+        
+        # Truncate to size of smaller profile
+        self.N = np.min([self.N, copy_of_other.N])
+        self.duration = np.min([self.duration, copy_of_other.duration])
+        self.profile = self.profile[:self.N] + copy_of_other.profile[:self.N]
+        
+        # Update epoch of pulse
+        #
+        # NOTE: number is only meaningful if all pulses come from same obs.
+        #
+        self.number = (self.count * self.number + ocount * other.number) / \
+                                float(self.count + ocount)
+        self.time = (self.count * self.time + ocount * other.time) / \
+                                float(self.count + ocount)
+        self.mjd = (self.count * self.mjd + ocount * other.mjd) / \
+                                float(self.count + ocount)
+
+        # Update count of profiles summed
+        self.count += ocount
+        
+        #
+        # NOTE: Should we modify on-pulse region?
+        #
+        return self
+
+
+    def __contains__(self, item):
+        """Check if item is contained in self.
+            If item is a SummedPulse object return True
+            if there is _any_ overlap between registries.
+            If item is a Pulse object return True if
+            it is listed in self's registry.
+        """
+        if hasattr(item, 'pulse_registry'):
+            for fn in item.pulse_registry.keys():
+                if fn in self.pulse_registry.keys():
+                    for num in item.pulse_registry[fn]:
+                        if num in self.pulse_registry[fn]:
+                            return True
+        else:
+            if item.origfn in self.pulse_registry.keys() and \
+                item.number in self.pulse_registry[item.origfn]:
+                return True
+        return False
+
+    def write_to_file(self):
+        """Dump the pulse to file.
+        """
+        #
+        # Assume original filename has an extension
+        # NOTE: This is probably not good to assume.
+        #
+        basefn, extension = os.path.splitext(self.origfn)
+        file = open("%s.summedprof" % basefn, 'w')
+        file.write("# Original data file              = %s\n" % self.origfn)
+        file.write("# Pulse Number                    = %d\n" % self.number)
+        file.write("# MJD of start of pulse           = %0.15f\n" % self.mjd)
+        file.write("# Time into observation (seconds) = %f\n" % self.time)
+        file.write("# Duration of pulse (seconds)     = %0.15f\n" % self.duration)
+        file.write("# Profile bins                    = %d\n" % self.N)
+        file.write("# Width of profile bin (seconds)  = %g\n" % self.dt)
+        if self.on_pulse is not None:
+            for i, (lo,hi) in enumerate(self.on_pulse):
+                file.write("# On-pulse region %2d (phase)      = %f-%f\n" % \
+                                                                    (i,lo,hi))
+        file.write("# Number of profiles summed       = %d\n" % self.count)
+        for fn in self.pulse_registry.keys():
+            for num in sorted(self.pulse_registry[fn]):
+                file.write("# Pulse registry                  = %s:%d\n" % \
+                                                                    (fn, num))
+        file.write("###################################\n")
+        for i, val in enumerate(self.profile):
+            file.write("%-10d %f\n" % (i, val))
+        file.close()
+
 def read_pulse_from_file(filename):
     """Read pulse information from 'filename' and
         return a Pulse object.
@@ -248,7 +392,9 @@ def read_pulse_from_file(filename):
     profile = []
     on_pulse_regions = []
     for line in file.readlines():
-        if line.startswith("# Pulse Number"):
+        if line.startswith("# Original data file"):
+            origfn = line.split('=')[-1].strip()
+        elif line.startswith("# Pulse Number"):
             number = int(line.split('=')[-1].strip())
         elif line.startswith("# MJD of start of pulse"):
             mjd = float(line.split('=')[-1].strip())
@@ -256,6 +402,8 @@ def read_pulse_from_file(filename):
             time = float(line.split('=')[-1].strip())
         elif line.startswith("# Duration of pulse (seconds)"):
             duration = float(line.split('=')[-1].strip())
+        elif line.startswith("# Width of profile bin (seconds)"):
+            dt = float(line.split('=')[-1].strip())
         elif line.startswith("# On-pulse region"):
             lo = float(line.split('=')[-1].split('-')[0].strip())
             hi = float(line.split('=')[-1].split('-')[1].strip())
@@ -266,9 +414,9 @@ def read_pulse_from_file(filename):
             # Profile value
             profile.append(float(line.split()[-1].strip()))
     return Pulse(number, mjd, time, duration, np.array(profile), \
-                    on_pulse_regions)
-            
-            
+                    origfn, dt, on_pulse_regions)
+
+
 class OnPulseRegionError(Exception):
     """Error when on-pulse region is ill-defined.
     """
