@@ -63,8 +63,7 @@ def main():
     for current_pulse in timeseries.pulses(get_period):
         maxsnr = 0
         bestfactor = 0
-        current_pulse.set_onoff_pulse_regions([(options.on_pulse_start, \
-                                                options.on_pulse_end)])
+        current_pulse.set_onoff_pulse_regions(options.on_pulse_regions)
         if current_pulse.is_masked(numchunks=5): 
             continue
         for numbins in options.widths:
@@ -363,13 +362,22 @@ def parse_boxcar_widths(option, opt_str, value, parser):
     setattr(parser.values, option.dest, widths)
 
 
+def parse_on_pulse_regions(option, opt_str, value, parser):
+    """Parse list of on-pulse regions from command line.
+    """
+    on_pulse = []
+    for pair in value.split(','):
+        lo, hi = pair.split(':')
+        on_pulse.append((float(lo), float(hi)))
+    setattr(parser.values, option.dest, on_pulse)
+
+
 if __name__ == '__main__':
-    parser = optparse.OptionParser(usage="%prog --use-parfile PARFILE | --use-polycos POLYCOFILE | -p --period PERIOD [options] infile.dat", description="Given a input timeseries (a PRESTO .dat file) dissect it into individual pulses and record the pulses that surpass the signification threshold.", version="%prog 0.9")
+    parser = optparse.OptionParser(usage="%prog --use-parfile PARFILE | --use-polycos POLYCOFILE | -p --period PERIOD [options] infile.dat", description="Given a input timeseries (a PRESTO .dat file) dissect it into individual pulses and record the pulses that surpass the signification threshold. Written by Patrick Lazarus.", version="%prog v0.9 (by Patrick Lazarus)", prog="dissect.py")
     parser.add_option('-t', '--threshold', dest='threshold', type='float', action='store', help="Only record pulses more significant than this threshold. (Default: 5).", default=5)
     parser.add_option('-n', '--no-output-files', dest='create_output_files', action='store_false', help="Do not create any output file for each significant pulse detected. (Default: create output files).", default=True)
     parser.add_option('--no-text-files', dest='create_text_files', action='store_false', help="Do not create text file for each significant pulse detected. (Default: create text files).", default=True)
-    parser.add_option('-s', '--on-pulse-start', dest='on_pulse_start', type='float', help="Define start of on-pulse region. Value should be a float between 0 and 1. (Default: 0.0).", default=0.0)
-    parser.add_option('-e', '--on-pulse-end', dest='on_pulse_end', type='float', help="Define end of on-pulse region. Value should be a float between 0 and 1. (Default: 1.0).", default=1.0)
+    parser.add_option('-r', '--on-pulse-regions', dest='on_pulse_regions', type='string', action='callback', callback=parse_on_pulse_regions, help="Define (multiple) on-pulse regions. Beginning and end of each region should be separated by ':' and multiple pairs should be separated by ','. No spaces! Values should be given in terms of rotational phase, floats between 0.0 and 1.0. (Default: None).", default=None)
     parser.add_option('-w', '--widths', dest='widths', type='string', action='callback', callback=parse_boxcar_widths, help="Boxcar widths (in number of samples) to use for smoothing profiles when searching for pulses. widths should be comma-separated _without_ spaces. (Default: Smooth with boxcar widths %s)" % DEFAULT_WIDTHS, default=DEFAULT_WIDTHS)
 
     period_group = optparse.OptionGroup(parser, "Period Determination", "The following options are different methods for determine the spin period of the pulsar. Exactly one of these options must be provided.")
