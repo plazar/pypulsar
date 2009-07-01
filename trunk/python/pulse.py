@@ -215,14 +215,18 @@ class Pulse:
         return False
 
 
-    def write_to_file(self):
+    def write_to_file(self, basefn=None):
         """Dump the pulse to file.
+            'basefn' is base filename to use. Default will
+            be to use same as original data file's name
+            (with the extension).
         """
         #
         # Assume original filename has an extension
         # NOTE: This is probably not good to assume.
         #
-        basefn, extension = os.path.splitext(self.origfn)
+        if basefn is None:
+            basefn, extension = os.path.splitext(self.origfn)
         file = open("%s.prof%d" % (basefn, self.number), 'w')
         file.write("# Original data file              = %s\n" % self.origfn)
         file.write("# Pulse Number                    = %d\n" % self.number)
@@ -248,9 +252,12 @@ class Pulse:
             # Other is a SummedPulse object. Use SummedPulse's __iadd__ method.
             summed_pulse = other.make_copy()
         else:
-            summed_pulse = SummedPulse(other.number, other.mjd, other.time, \
-                                other.duration, other.profile, other.origfn, \
-                                other.dt, other.on_pulse)
+            copy_of_other = other.make_copy()
+            copy_of_other.scale()
+            summed_pulse = SummedPulse(copy_of_other.number, copy_of_other.mjd, \
+                                copy_of_other.time, copy_of_other.duration, \
+                                copy_of_other.profile, copy_of_other.origfn, \
+                                copy_of_other.dt, copy_of_other.on_pulse)
         summed_pulse += self
         return summed_pulse
 
@@ -306,7 +313,7 @@ class SummedPulse(Pulse):
             ocount = 1
        
         # Prepare profiles for summing
-        self.scale()
+        # self.scale()
         copy_of_other = other.make_copy()
         copy_of_other.scale()
         
@@ -354,14 +361,18 @@ class SummedPulse(Pulse):
                 return True
         return False
 
-    def write_to_file(self):
+    def write_to_file(self, basefn=None):
         """Dump the pulse to file.
+            'basefn' is base filename to use. Default will
+            be to use the first profile's original data file's 
+            name (with the extension).
         """
         #
         # Assume original filename has an extension
         # NOTE: This is probably not good to assume.
         #
-        basefn, extension = os.path.splitext(self.origfn)
+        if basefn is None:
+            basefn, extension = os.path.splitext(self.origfn)
         file = open("%s.summedprof" % basefn, 'w')
         file.write("# Original data file              = %s\n" % self.origfn)
         file.write("# Pulse Number                    = %d\n" % self.number)
