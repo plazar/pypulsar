@@ -69,17 +69,24 @@ class Datfile:
         self.currtime = 0.0
 
 
-    def pulses(self, period_at_mjd):
+    def pulses(self, period_at_mjd, time_to_skip=0.0):
         """Generator method to generate/iterate over pulse
             profiles from datfile.
             'period_at_mjd' is a function that, given a mjd,
             will return the spin period at that mjd.
+            Skip 'time_to_skip' seconds at the start of the
+            observation. (First pulse period after skip is
+            still called pulse #1)
         """
         # Initialize
         self.rewind()
+        if time_to_skip > 0.0:
+            print "Burning %f s at start of obs." % time_to_skip
+            self.read_Tseconds(time_to_skip)
         pulse_number = 1
-        current_mjd = self.infdata.epoch    # MJD at start of obs
-        current_obstime = 0                 # Time into obs (seconds)
+        current_mjd = self.infdata.epoch + \
+                        self.currtime / float(psr_utils.SECPERDAY)
+        current_obstime = self.currtime             # Time into obs (seconds)
         current_period = period_at_mjd(current_mjd)
         current_pulse = self.read_Tseconds(current_period)
         while current_pulse is not None:

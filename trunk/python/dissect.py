@@ -43,15 +43,43 @@ def main():
     datfn = args[0]
     timeseries = datfile.Datfile(datfn)
 
+    if options.shift_phase != 0.0:
+        # Only shift phase by a fraction of one rotation
+        options.shift_phase -= int(options.shift_phase)
+        if options.shift_phase < 0.0:
+            options.shift_phase += 1.0
+    else:
+        shift_time = 0.0
     if options.parfile is not None:
         # generate polycos
         # get periods from polycos
         polycos = mypolycos.create_polycos(options.parfile, timeseries.infdata)
+        if options.shift_phase != 0.0:
+            mjd = timeseries.infdata.epoch
+            mjdi = int(mjd) # integer part of mjd
+            mjdf = mjd-mjdi # fractional part of mjd
+            phase, freq = polycos.get_phs_and_freq(mjdi, mjdf)
+            print "DEBUG: phase at start of file: %f" % phase
+            shift_phase = options.shift_phase - phase
+            if shift_phase < 0.0:
+                shift_phase += 1.0
+            shift_time = shift_phase * 1.0/freq
         get_period = lambda mjd: 1.0/polycos.get_phs_and_freq(int(mjd), \
                                                                mjd-int(mjd))[1]
     elif options.polycofile is not None:
+        if options.shift_phase != 0.0:
+            mjd = timeseries.infdata.epoch
+            mjdi = int(mjd) # integer part of mjd
+            mjdf = mjd-mjdi # fractional part of mjd
+            phase, freq = polycos.get_phs_and_freq(mjdi, mjdf)
+            shift_phase = options.shift_phase - phase
+            if shift_phase < 0.0:
+                shift_phase += 1.0
+            shift_time = shift_phase * 1.0/freq
         raise NotImplementedError("--use-polycos option in dissect.py is not implemented yet")
     elif options.period is not None:
+        if options.shift_phase != 0.0:
+            shift_time = options.shift_phase * options.period
         get_period = lambda mjd: options.period
     else:
         raise "Unknown option for reading periods!"
@@ -60,7 +88,8 @@ def main():
     good_pulses = []
     snrs = []
     notes = []
-    for current_pulse in timeseries.pulses(get_period):
+    for current_pulse in timeseries.pulses(get_period, \
+                                    time_to_skip=shift_time):
         maxsnr = 0
         bestfactor = 0
         current_pulse.set_onoff_pulse_regions(options.on_pulse_regions)
@@ -377,8 +406,9 @@ if __name__ == '__main__':
     parser.add_option('-t', '--threshold', dest='threshold', type='float', action='store', help="Only record pulses more significant than this threshold. (Default: 5).", default=5)
     parser.add_option('-n', '--no-output-files', dest='create_output_files', action='store_false', help="Do not create any output file for each significant pulse detected. (Default: create output files).", default=True)
     parser.add_option('--no-text-files', dest='create_text_files', action='store_false', help="Do not create text file for each significant pulse detected. (Default: create text files).", default=True)
-    parser.add_option('-r', '--on-pulse-regions', dest='on_pulse_regions', type='string', action='callback', callback=parse_on_pulse_regions, help="Define (multiple) on-pulse regions. Beginning and end of each region should be separated by ':' and multiple pairs should be separated by ','. No spaces! Values should be given in terms of rotational phase, floats between 0.0 and 1.0. (Default: None).", default=None)
+    parser.add_option('-r', '--on-pulse-regions', dest='on_pulse_regions', type='string', action='callback', callback=parse_on_pulse_regions, help="Define (multiple) on-pulse regions. Beginning and end of each region should be separated by ':' and multiple pairs should be separated by ','. No spaces! Values should be given in terms of rotational phase, floats between 0.0 and 1.0. The on-pulse region is applied after the start of the observation has been shifted. (Default: None).", default=None)
     parser.add_option('-w', '--widths', dest='widths', type='string', action='callback', callback=parse_boxcar_widths, help="Boxcar widths (in number of samples) to use for smoothing profiles when searching for pulses. widths should be comma-separated _without_ spaces. (Default: Smooth with boxcar widths %s)" % DEFAULT_WIDTHS, default=DEFAULT_WIDTHS)
+    parser.add_option('-s', '--shift-phase', dest='shift_phase', type='float', help="Set provided phase as the beginning of each pulse period. This is done by removing a piece of data from the beginning of the observation. If polycos, or parfile are used, then the phase is given by the polycos. If a constant period is used then the beginning of the observation is assumed to be phase=0.0. (Default: First pulse period begins at start of observation).", default=0.0)
 
     period_group = optparse.OptionGroup(parser, "Period Determination", "The following options are different methods for determine the spin period of the pulsar. Exactly one of these options must be provided.")
     period_group.add_option('--use-parfile', dest='parfile', type='string', action='store', help="Determine spin period from polycos generated by tempo using provided parfile.", default=None)
