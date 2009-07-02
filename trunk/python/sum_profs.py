@@ -22,7 +22,8 @@ post_sum_processing = []
 def main():
     pulsefiles = args + glob.glob(options.glob_expr)
     if len(pulsefiles) < 2:
-        sys.stderr.write("Only %d pulse files provided. Exiting!" % \
+        print pulsefiles
+        sys.stderr.write("Only %d pulse files provided. Exiting!\n" % \
                                 len(pulsefiles))
         sys.exit(1)
 
@@ -67,6 +68,7 @@ if __name__=='__main__':
     postsum_group.add_option('--downsample', dest='downsample', type='int', action='callback', callback=register_post_sum_processing, help="Downsample profile by given factor.")
     postsum_group.add_option('--smooth', dest='smooth', type='int', action='callback', callback=register_post_sum_processing, help="Smooth profile using a boxcar of given width.")
     postsum_group.add_option('--detrend', dest='detrend', type='int', action='callback', callback=register_post_sum_processing, help="Break profile into N chunks (where N is provided on command line) and subtract a linear trend from each chunk.")
+    postsum_group.add_option('--interpolate', dest='interpolate', type='int', action='callback', callback=register_post_sum_processing, help="Interpolate profile so it has N bins across it (where N is provided on the command line).")
     parser.add_option_group(postsum_group)
     
     options, args = parser.parse_args()

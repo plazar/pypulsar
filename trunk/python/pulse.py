@@ -199,6 +199,17 @@ class Pulse:
         self.profile = scipy.signal.detrend(self.profile, bp=break_points)
         
 
+    def interpolate(self, numsamples):
+        """Interpolate profile so it has 'numsamples' across it.
+
+            NOTE: The profile attribute of 'self' will be modified.
+        """
+        zoom = numsamples/float(self.N)
+        self.profile = psr_utils.linear_interpolate(self.profile, zoom)
+        self.N = numsamples
+        self.dt = self.dt/float(zoom)
+
+
     def is_masked(self, numchunks=5):
         """Break pulse profile into 'numchunks'. Check each chunk
             if it is flat (max value == min value). If it is then
