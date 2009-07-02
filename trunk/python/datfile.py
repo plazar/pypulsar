@@ -27,46 +27,88 @@ class Datfile:
             self.infdata = infodata.infodata(self.inffn)
         else:
            raise "Filename (%s) doesn't end with '.dat'"
-        # initialize file, and current sample and current time counters
+        # initialize file, and current sample, time, and MJD counters
         self.rewind()
 
         
     def __str__(self):
-        return self.datfn
+        string_repr = "%s:\n" % self.origfn
+        string_repr += "\tCurrent sample: %d\n" % self.currsample
+        string_repr += "\tCurrent desired MJD: %0.15f\n" % self.currmjd_desired
+        string_repr += "\tCurrent actual MJD: %0.15f\n" % self.currmjd_actual
+        string_repr += "\tCurrent desired time: %0.9f\n" % self.currtime_desired
+        string_repr += "\tCurrent actual time: %0.9" % self.currtime_actual
+        return string_repr
 
 
-    def read_Nsamples(self, N):
-        """Read N samples from datfile and return a numpy array
+    def __read(self, N):
+        """Private method:
+            Read N samples from dat file and return numpy array
             of the data.
+            Only return data if at least N samples remain in
+            the data file. Otherwise return None.
         """
         new_curr_sample = self.currsample + N
         if new_curr_sample > self.infdata.N:
             return None
         else:
             self.currsample = new_curr_sample
+            self.currmjd_actual += self.infdata.dt * N / \
+                                    float(psr_utils.SECPERDAY)
+            self.currtime_actual += self.infdata.dt * N
             return np.fromfile(self.datfile, dtype=self.dtype, count=N)
+        
+        
+    def __update_desired_time(self, T):
+        """Private method:
+            Update current desired time and MJD
+        """
+        self.currtime_desired += T
+        self.currmjd_desired += T / float(psr_utils.SECPERDAY)
+
+
+    def read_Nsamples(self, N):
+        """Read N samples from datfile and return a numpy array
+            of the data, or None if there aren't N samples of
+            data left in the file.
+        """
+        # Read data
+        data = self.__read(N)
+        if data is not None:
+            self.__update_desired_time(N * self.infdata.dt)
+        return data
 
 
     def read_Tseconds(self, T):
         """Read T seconds worth of data from datfile and return
-            a numpy array of the data.
+            a numpy array of the data, or None if there aren't
+            T seconds worth of data left in the file.
         """
         # Compute number of samples to read
-        endsample = np.round((self.currtime+T)/self.infdata.dt)
+        endsample = np.round((self.currtime_desired+T)/self.infdata.dt)
         num_samples_to_read = int(endsample-self.currsample)
-        # Update current time
-        self.currtime += T
-        # Read data using read_Nsamples(...)
-        return self.read_Nsamples(num_samples_to_read)
+        # Read data
+        data = self.__read(num_samples_to_read)
+        if data is not None:
+            self.__update_desired_time(T)
+        return data
 
 
     def rewind(self):
-        """Rewind file to beginning. Also, reset current time
-            and current sample.
+        """Rewind file to beginning. Also, reset current time,
+           current mjd and current sample.
         """
         self.datfile.seek(0)
+        # Current sample (number of samples already read)
         self.currsample = 0
-        self.currtime = 0.0
+        # Actual current time (incrememted by integer number of samples)
+        self.currtime_actual = 0.0
+        # Desired current time (keep track of requests given in seconds)
+        self.currtime_desired = 0.0
+        # Actual current MJD (incremented by integer number of samples)
+        self.currmjd_actual = self.infdata.epoch
+        # Desired current MJD (keep track of requests)
+        self.currmjd_desired = self.infdata.epoch
 
 
     def pulses(self, period_at_mjd, time_to_skip=0.0):
@@ -83,21 +125,27 @@ class Datfile:
         if time_to_skip > 0.0:
             print "Burning %f s at start of obs." % time_to_skip
             self.read_Tseconds(time_to_skip)
+
         pulse_number = 1
-        current_mjd = self.infdata.epoch + \
-                        self.currtime / float(psr_utils.SECPERDAY)
-        current_obstime = self.currtime             # Time into obs (seconds)
+        # Copy current mjd and time since reading data
+        # will modify the object attributes
+        current_time = self.currtime_actual
+        current_mjd = self.currmjd_actual
+        #
+        # NOTE: Using currmjd_actual, is this correct?
+        #       Should we be using currmjd_desired instead?
+        #
         current_period = period_at_mjd(current_mjd)
         current_pulse = self.read_Tseconds(current_period)
         while current_pulse is not None:
             # yield (return) current pulse (and other information)
             yield pulse.Pulse(number=pulse_number, mjd=current_mjd, \
-                              time=current_obstime, duration=current_period, \
+                              time=current_time, duration=current_period, \
                               profile=current_pulse, origfn=self.datfn, \
                               dt=self.infdata.dt)
             # Update pulse number, mjd, period and pulse
             pulse_number += 1
-            current_mjd += float(current_period) / psr_utils.SECPERDAY
-            current_obstime += current_period
+            current_time = self.currtime_actual
+            current_mjd = self.currmjd_actual
             current_period = period_at_mjd(current_mjd)
             current_pulse = self.read_Tseconds(current_period)
