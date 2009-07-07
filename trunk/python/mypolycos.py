@@ -12,25 +12,11 @@ import types
 import numpy as Num
 import parfile
 import psr_utils
+import telescopes
 
 # Constants
 NUMCOEFFS_DEFAULT = 12
 SPAN_DEFAULT = 60 # span of each poylco in minutes
-
-telescope_to_id_track = {"GBT":('1', 12), \
-                         "Arecibo":('3',3), \
-                         "VLA":('6',6), \
-                         "Parkes":('7',12), \
-                         "Jodrell":('8',12), \
-                         "GB43m":('a',12), \
-                         "GB 140FT":('a',12), \
-                         "Nancay":('f',4), \
-                         "Effelsberg":('g',12), \
-                         "WSRT":('i',12), \
-                         "GMRT":('r',12), \
-                         "Geocenter":('o',12), \
-                         "Barycenter":('@',12)}
-
 
 class polyco:
     def __init__(self, fileptr):
@@ -160,7 +146,8 @@ def create_polycos(par, infdata):
         pass
     
     obslength = (infdata.dt*infdata.N) / psr_utils.SECPERDAY
-    (telescope_id, max_hour_angle) = telescope_to_id_track[infdata.telescope]
+    telescope_id = telescopes.telescope_to_id[infdata.telescope]
+    max_hour_angle = telescopes.telescope_to_maxha[infdata.telescope]
     if telescope_id != 'o' and telescope_id !='@':
         center_freq = infdata.lofreq + (infdata.numchan/2 - 0.5) * \
                                             infdata.chan_width
