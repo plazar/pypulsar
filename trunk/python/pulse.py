@@ -257,6 +257,16 @@ class Pulse:
         file.close()
 
 
+    def to_summed_pulse(self):
+        """Create and return a SummedPulse object using
+            self as the starting point of the sum.
+        """
+        summed_pulse = SummedPulse(self.number, self.mjd, self.time, \
+                                self.duration, self.profile, self.origfn, \
+                                self.dt, self.on_pulse)
+        return summed_pulse
+        
+
     def __add__(self, other):
         """Add two Pulse objects.
         """
@@ -266,10 +276,7 @@ class Pulse:
         else:
             copy_of_other = other.make_copy()
             copy_of_other.scale()
-            summed_pulse = SummedPulse(copy_of_other.number, copy_of_other.mjd, \
-                                copy_of_other.time, copy_of_other.duration, \
-                                copy_of_other.profile, copy_of_other.origfn, \
-                                copy_of_other.dt, copy_of_other.on_pulse)
+            summed_pulse = copy_of_other.to_summed_pulse()
         summed_pulse += self
         return summed_pulse
 
