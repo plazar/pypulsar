@@ -17,13 +17,13 @@ class Pulse:
     def __init__(self, number, mjd, time, duration, profile, \
                     origfn, dt, on_pulse_regions=None):
         """Create a pulse object. Arguments provided are:
-            - number: The pulse number (for example, counted from
-                        beginning of an observation.)
+            - number: The pulse number (Counted from beginning 
+                                        of an observation.)
             - mjd: MJD of the first sample in the pulse profile.
             - time: Time elapsed (in seconds) measured from
                         beginning of observation to first sample
                         in the pulse profile.
-            - duration: Durration of the pulse (in seconds).
+            - duration: Duration of the pulse (in seconds).
             - profile: A numpy array containing the raw pulse
                         profile (a slice of a timeseries).
             - origfn: Name of data file the pulse originated from.
@@ -204,10 +204,11 @@ class Pulse:
 
             NOTE: The profile attribute of 'self' will be modified.
         """
-        zoom = numsamples/float(self.N)
-        self.profile = psr_utils.linear_interpolate(self.profile, zoom)
+        xp = np.arange(self.N)
+        x = np.linspace(0, self.N-1, numsamples)
+        self.profile = np.interp(x, xp, self.profile)
+        self.dt = self.dt*self.N/float(numsamples)
         self.N = numsamples
-        self.dt = self.dt/float(zoom)
 
 
     def is_masked(self, numchunks=5):
