@@ -264,6 +264,7 @@ class Pulse:
         summed_pulse = SummedPulse(self.number, self.mjd, self.time, \
                                 self.duration, self.profile, self.origfn, \
                                 self.dt, self.on_pulse)
+        summed_pulse.scale()
         return summed_pulse
         
 
