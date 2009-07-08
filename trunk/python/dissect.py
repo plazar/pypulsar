@@ -19,8 +19,11 @@ import sys
 import optparse
 import warnings
 import numpy as np
+import psr_utils
+import fftfit
 import datfile
 import mypolycos
+import telescopes
 
 import ppgplot
 # Import matplotlib/pylab and set for non-interactive plots
@@ -35,7 +38,6 @@ DEFAULT_WIDTHS = [1,2,4,8,16,32] # Powers of 2
 # DEFAULT_WIDTHS = [1,2,3,4,6,9,14,20,30] # Default from single_pulse_search.py
                     # default boxcar widths to use for smoothing
                     # when searching for pulses.
-
    
 
 def main():
@@ -50,33 +52,41 @@ def main():
             options.shift_phase += 1.0
     else:
         shift_time = 0.0
+        
     if options.parfile is not None:
         # generate polycos
-        # get periods from polycos
         polycos = mypolycos.create_polycos(options.parfile, timeseries.infdata)
+        mjd = timeseries.infdata.epoch
+        mjdi = int(mjd) # integer part of mjd
+        mjdf = mjd-mjdi # fractional part of mjd
+        phase, freq = polycos.get_phs_and_freq(mjdi, mjdf)
+        print "DEBUG: phase at start of file: %f" % phase
         if options.shift_phase != 0.0:
-            mjd = timeseries.infdata.epoch
-            mjdi = int(mjd) # integer part of mjd
-            mjdf = mjd-mjdi # fractional part of mjd
-            phase, freq = polycos.get_phs_and_freq(mjdi, mjdf)
-            print "DEBUG: phase at start of file: %f" % phase
+            prof_start_phase = options.shift_phase
             shift_phase = options.shift_phase - phase
             if shift_phase < 0.0:
                 shift_phase += 1.0
             shift_time = shift_phase * 1.0/freq
+        else:
+            prof_start_phase = phase
+        # get periods from polycos
         get_period = lambda mjd: 1.0/polycos.get_phs_and_freq(int(mjd), \
                                                                mjd-int(mjd))[1]
     elif options.polycofile is not None:
+        raise NotImplementedError("--use-polycos option in dissect.py is not implemented yet")
+        mjd = timeseries.infdata.epoch
+        mjdi = int(mjd) # integer part of mjd
+        mjdf = mjd-mjdi # fractional part of mjd
+        phase, freq = polycos.get_phs_and_freq(mjdi, mjdf)
+        print "DEBUG: phase at start of file: %f" % phase
         if options.shift_phase != 0.0:
-            mjd = timeseries.infdata.epoch
-            mjdi = int(mjd) # integer part of mjd
-            mjdf = mjd-mjdi # fractional part of mjd
-            phase, freq = polycos.get_phs_and_freq(mjdi, mjdf)
+            prof_start_phase = options.shift_phase
             shift_phase = options.shift_phase - phase
             if shift_phase < 0.0:
                 shift_phase += 1.0
             shift_time = shift_phase * 1.0/freq
-        raise NotImplementedError("--use-polycos option in dissect.py is not implemented yet")
+        else:
+            prof_start_phase = phase
     elif options.period is not None:
         if options.shift_phase != 0.0:
             shift_time = options.shift_phase * options.period
@@ -118,14 +128,106 @@ def main():
     print_report(good_pulses, snrs=snrs, notes=notes)
     if options.create_output_files:
         if options.create_text_files:
+            print "Writing pulse text files..."
             write_pulses(good_pulses, timeseries)
         if options.create_plot_files:
+            print "Creating pulse plots..."
             plot_pulses(good_pulses, timeseries, options.downfactor)
         if options.create_joydiv_plot:
             #joy_division_plot2(good_pulses, timeseries.pulses(get_period), \
             #                timeseries, options.downfactor, \
             #                options.on_pulse_start, options.on_pulse_end)
+            print "Making JoyDiv plot..."
             joy_division_plot(good_pulses, timeseries, options.downfactor)
+
+
+    if (options.polycofile is not None or options.parfile is not None) and \
+                options.write_toas and len(good_pulses) > 0:
+        print "Generating TOAs. Please wait..."
+        # Extract second column from template file
+        # First column is index
+        template = np.loadtxt(options.template, usecols=(1,))
+        # Get TOAs and write them to stdout
+        current_pulse = None
+        ##print "%d pulses to consider." % len(good_pulses) ##
+        for pulse in good_pulses:
+            if current_pulse is None:
+                ##print "Creating SummedPulse object" ##
+                current_pulse = pulse.to_summed_pulse()
+            else:
+                ##print "Summing pulses" ##
+                current_pulse += pulse
+            ##print "Current SummedPulse has SNR = %f" % get_snr(current_pulse) ##
+            if get_snr(current_pulse) > options.toa_threshold:
+                ##print "Writing TOA" ##
+                warnings.warn("Using hardcoded values to test code.")
+                current_pulse.interpolate(17024)
+                current_pulse.downsample(133)
+                ##print current_pulse.N, len(current_pulse.profile)
+                ##print len(template)
+                write_toa(current_pulse, polycos, template, timeseries, \
+                            prof_start_phase)
+                current_pulse = None
+
+
+def write_toa(summed_pulse, polycos, template_profile, \
+                        timeseries, start_phase=0.0):
+    """Given a SummedPulse generate a TOA and write it to stdout. 
+        A polycos file is required. 'template_profile' is simply 
+        a numpy array. 'timeseries' is a Datfile object.
+        'start_phase' is the phase at the start of the profile.
+    """
+    if template_profile is None:
+        raise "A templete profile MUST be provided! ... need proper exception."
+    # This code is taken from Scott Ransom's PRESTO's get_TOAs.py
+    mjdi = int(summed_pulse.mjd) # integer part of MJD
+    mjdf = summed_pulse.mjd - mjdi # fractional part of MJD
+    (phs, freq) = polycos.get_phs_and_freq(mjdi, mjdf)
+    phs -= start_phase
+    period = 1.0/freq
+    t0f = mjdf - phs*period/psr_utils.SECPERDAY
+    t0i = mjdi
+    ##print "len(summed), len(template): ", len(summed_pulse.profile), len(template_profile)
+    shift,eshift,snr,esnr,b,errb,ngood = measure_phase(summed_pulse.profile, \
+                            template_profile)
+    ##print "measured phase"
+    # tau and tau_err are the predicted phase of the pulse arrival
+    tau, tau_err = shift/summed_pulse.N, eshift/summed_pulse.N
+    # Note: "error" flags are shift = 0.0 and eshift = 999.0
+    if (np.fabs(shift) < 1e-7 and np.fabs(eshift-999.0) < 1e-7):
+        raise "Bad return from FFTFIT! ... Need proper exception"
+    # Send the TOA to STDOUT
+    toaf = t0f + tau*period/float(psr_utils.SECPERDAY)
+    newdays = int(np.floor(toaf))
+    centre_freq = timeseries.infdata.lofreq + timeseries.infdata.chan_width * \
+                        timeseries.infdata.numchan/2.0
+    obs_code = telescopes.telescope_to_id[timeseries.infdata.telescope]
+    psr_utils.write_princeton_toa(t0i+newdays, toaf-newdays, \
+                                tau_err*period*1e6, centre_freq, \
+                                timeseries.infdata.DM, obs=obs_code)
+
+
+def measure_phase(profile, template):
+    """Call FFTFIT on the profile and template to determine the
+        following parameters: shift,eshift,snr,esnr,b,errb,ngood
+        (returned as a tuple).  These are defined as in Taylor's
+        talk at the Royal Society.
+    """
+    # This code is taken from Scott Ransom's PRESTO's get_TOAs.py
+    ##print "len(template), type(template), template.dtype:", len(template), type(template), template.dtype
+    ##print "template.shape:", template.shape
+    ##print template
+    c,amp,pha = fftfit.cprof(template)
+    pha1 = pha[0]
+    pha = np.fmod(pha-np.arange(1,len(pha)+1)*pha1, 2.0*np.pi)
+    ##print "before fftfit"
+    ##print "len(profile), type(profile), profile.dtype:", len(profile), type(profile), profile.dtype
+    ##print "len(amp), type(amp), amp.dtype:", len(amp), type(amp), amp.dtype
+    ##print "len(pha), type(pha), pha.dtype:", len(pha), type(pha), pha.dtype
+    shift,eshift,snr,esnr,b,errb,ngood = fftfit.fftfit(profile,amp,pha)
+    ##print "just after fftfit"
+    ##sys.stdout.flush()
+    return shift,eshift,snr,esnr,b,errb,ngood
 
 
 def get_snr(pulse, uncertainty=1):
@@ -410,6 +512,12 @@ if __name__ == '__main__':
     parser.add_option('-w', '--widths', dest='widths', type='string', action='callback', callback=parse_boxcar_widths, help="Boxcar widths (in number of samples) to use for smoothing profiles when searching for pulses. widths should be comma-separated _without_ spaces. (Default: Smooth with boxcar widths %s)" % DEFAULT_WIDTHS, default=DEFAULT_WIDTHS)
     parser.add_option('-s', '--shift-phase', dest='shift_phase', type='float', help="Set provided phase as the beginning of each pulse period. This is done by removing a piece of data from the beginning of the observation. If polycos, or parfile are used, then the phase is given by the polycos. If a constant period is used then the beginning of the observation is assumed to be phase=0.0. (Default: First pulse period begins at start of observation).", default=0.0)
 
+    toa_group = optparse.OptionGroup(parser, "TOA Generation", "The following options are used to determine if/how TOAs are generated.")
+    toa_group.add_option('--toas', dest='write_toas', action='store_true', help="Write TOAs to stdout. A TOA for each pulse will be written out unless --toa-threshold is provided, in which case consecutive pulses will be summed until sum profile's SNR surpases threshold.", default=False)
+    toa_group.add_option('--template', dest='template', type='string', help="Required option if generating TOAs. This is the template profile to use.", default=None)
+    toa_group.add_option('--toa-threshold', dest="toa_threshold", type='float', action='store', help="Threshold SNR for writing out TOAs. (Default: Use value from --threshold).", default=None)
+    parser.add_option_group(toa_group)
+
     period_group = optparse.OptionGroup(parser, "Period Determination", "The following options are different methods for determine the spin period of the pulsar. Exactly one of these options must be provided.")
     period_group.add_option('--use-parfile', dest='parfile', type='string', action='store', help="Determine spin period from polycos generated by tempo using provided parfile.", default=None)
     period_group.add_option('--use-polycos', dest='polycofile', type='string', action='store', help="Determine spin period from polycos in the provided file.", default=None)
@@ -425,8 +533,10 @@ if __name__ == '__main__':
 
     options, args = parser.parse_args()
 
-    # Count number of period determination options are provided
+    if options.toa_threshold is None:
+        options.toa_threshold = options.threshold
 
+    # Count number of period determination options are provided
     if (options.parfile is not None) + \
         (options.polycofile is not None) + \
         (options.period is not None) != 1:
