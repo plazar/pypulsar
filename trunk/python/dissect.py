@@ -160,9 +160,12 @@ def main():
             ##print "Current SummedPulse has SNR = %f" % get_snr(current_pulse) ##
             if get_snr(current_pulse) > options.toa_threshold:
                 ##print "Writing TOA" ##
-                warnings.warn("Using hardcoded values to test code.")
-                current_pulse.interpolate(17024)
-                current_pulse.downsample(133)
+                # Interpolate and downsample current_pulse so
+                # it is same size as template profile
+                downsamp = int(current_pulse.N/template.size)+1
+                interp = downsamp*template.size
+                current_pulse.interpolate(interp)
+                current_pulse.downsample(downsamp)
                 ##print current_pulse.N, len(current_pulse.profile)
                 ##print len(template)
                 write_toa(current_pulse, polycos, template, timeseries, \
