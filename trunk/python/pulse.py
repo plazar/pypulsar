@@ -149,13 +149,17 @@ class Pulse:
     
     def downsample(self, downfactor=1):
         """Downsample profile by adding 'downfactor' adjacent
-            bins. ('downfactor' does not have to be a factor
-            of the size of the profile. in this case the end
-            of the profile will be truncated.)
+            bins. ('downfactor' must be a factor of the size 
+            of the profile. Otherwise an exception is thrown.)
 
             NOTE: The profile attribute of 'self' will be modified.
         """
         if downfactor > 1:
+            # downfactor does not need to be a factor of the size
+            # of the profile. Left over samples will be truncated.
+            # This is not ideal so raise an exception.
+            if self.N % downfactor != 0:
+                raise "downfactor is not a factor of profile length! ... need proper exception."
             self.profile = self.profile[:self.N/downfactor*downfactor]
             self.N = int(self.N/downfactor) # New length of profile
             self.profile.shape = (self.N, downfactor)
