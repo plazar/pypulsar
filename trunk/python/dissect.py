@@ -279,6 +279,9 @@ def plot_pulses(pulses, timeseries, downfactor=1):
     """
     for pulse in pulses:
         copy_of_pulse = pulse.make_copy()
+        # Interpolate before downsampling
+        interp = ((copy_of_pulse.N/downfactor)+1)*downfactor
+        copy_of_pulse.interpolate(interp)
         copy_of_pulse.downsample(downfactor)
         plt.figure()
         plt.plot(copy_of_pulse.profile, 'k-', lw=0.5)
@@ -312,6 +315,9 @@ def joy_division_plot(pulses, timeseries, downfactor=1):
     for pulse in pulses:
         vertical_offset = (pulse.number-1)*JOYDIV_SEP
         copy_of_pulse = pulse.make_copy()
+        # Interpolate before downsampling
+        interp = ((copy_of_pulse.N/downfactor)+1)*downfactor
+        copy_of_pulse.interpolate(interp)
         copy_of_pulse.downsample(downfactor)
         copy_of_pulse.scale()
         if first:
@@ -383,6 +389,8 @@ def joy_division_plot2(good_pulses, all_pulses, timeseries, downfactor=1, \
     for pulse in all_pulses:
         pulse.set_onoff_pulse_regions([(on_pulse_start, on_pulse_end)])
         copy_of_pulse = pulse.make_copy()
+        # Interpolate before downsampling
+        interp = ((copy_of_pulse.N/downfactor)+1)*downfactor
         copy_of_pulse.downsample(downfactor)
         copy_of_pulse.scale()
         if pulse.number in good_nums:
