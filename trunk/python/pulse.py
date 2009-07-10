@@ -159,7 +159,7 @@ class Pulse:
             # of the profile. Left over samples will be truncated.
             # This is not ideal so raise an exception.
             if self.N % downfactor != 0:
-                raise "downfactor is not a factor of profile length! ... need proper exception."
+                raise "downfactor (%d) is not a factor of profile length (%d)! ... need proper exception." % (downfactor, self.N)
             self.profile = self.profile[:self.N/downfactor*downfactor]
             self.N = int(self.N/downfactor) # New length of profile
             self.profile.shape = (self.N, downfactor)
