@@ -215,6 +215,18 @@ class Pulse:
         self.N = numsamples
 
 
+    def interp_and_downsamp(self, numsamples):
+        """Interpolate and then downsample profile so it has
+            'numsamples' samples when finished.
+
+            NOTE: The profile attribute of 'self' will be modified.
+        """
+        downsamp = int(self.N/numsamples)+1
+        interp = downsamp*numsamples
+        self.interpolate(interp)
+        self.downsample(downsamp)
+
+
     def is_masked(self, numchunks=5):
         """Break pulse profile into 'numchunks'. Check each chunk
             if it is flat (max value == min value). If it is then
