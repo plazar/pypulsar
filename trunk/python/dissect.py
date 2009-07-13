@@ -54,7 +54,10 @@ def main():
         shift_time = 0.0
         
     if options.parfile is not None:
+        print "Using parfile: %s" % options.parfile
         # generate polycos
+        print "Automatically generating polycos..."
+        sys.stdout.flush()
         polycos = mypolycos.create_polycos(options.parfile, timeseries.infdata)
         mjd = timeseries.infdata.epoch
         mjdi = int(mjd) # integer part of mjd
@@ -74,6 +77,7 @@ def main():
                                                                mjd-int(mjd))[1]
     elif options.polycofile is not None:
         raise NotImplementedError("--use-polycos option in dissect.py is not implemented yet")
+        print "Using polycos file: %s" % options.polycos
         mjd = timeseries.infdata.epoch
         mjdi = int(mjd) # integer part of mjd
         mjdf = mjd-mjdi # fractional part of mjd
@@ -88,6 +92,7 @@ def main():
         else:
             prof_start_phase = phase
     elif options.period is not None:
+        print "Using constant period: %f" % options.period
         if options.shift_phase != 0.0:
             shift_time = options.shift_phase * options.period
         get_period = lambda mjd: options.period
@@ -98,12 +103,16 @@ def main():
     good_pulses = []
     snrs = []
     notes = []
+    nummasked = 0
+    numpulses = 0
     for current_pulse in timeseries.pulses(get_period, \
                                     time_to_skip=shift_time):
+        numpulses += 1
         maxsnr = 0
         bestfactor = 0
         current_pulse.set_onoff_pulse_regions(options.on_pulse_regions)
         if current_pulse.is_masked(numchunks=5): 
+            nummasked += 1
             continue
         for numbins in options.widths:
             pulse = current_pulse.make_copy()
@@ -125,8 +134,8 @@ def main():
                     bestfactor = numbins
             
 
-    print_report(good_pulses, snrs=snrs, notes=notes)
-    if options.create_output_files:
+    print_report(good_pulses, numpulses, nummasked, snrs=snrs, notes=notes)
+    if options.create_output_files and len(good_pulses) > 0:
         if options.create_text_files:
             print "Writing pulse text files..."
             write_pulses(good_pulses, timeseries)
@@ -247,30 +256,35 @@ def get_snr(pulse, uncertainty=1):
     return snr
 
 
-def print_report(pulses, snrs=None, notes=None):
+def print_report(pulses, numpulses, nummasked, snrs=None, notes=None):
     """Print a report given the pulses provided.
     """
     print "Autopsy report:"
-    print "\tNumber of good pulses found: %s" % len(pulses)
-    use_snrs = ""
-    use_notes = ""
-    if snrs is not None and len(snrs) == len(pulses):
-        use_snrs = "SNR"
-    if notes is not None and len(notes) == len(pulses):
-        use_notes = "Notes"
-    print "%s%s%s%s%s%s" % ("#".center(7), "MJD".center(15), \
-                                "Time".center(11), "Duration".center(13), \
-                                use_snrs.center(9), use_notes)
-    for i, pulse in enumerate(pulses):
-        sys.stdout.write(("%d" % pulse.number).center(7))
-        sys.stdout.write(("%5.4f" % pulse.mjd).center(15))
-        sys.stdout.write(("%5.2f" % pulse.time).center(11))
-        sys.stdout.write(("%2.4f" % pulse.duration).center(13))
-        if use_snrs:
-            sys.stdout.write(("%4.2f" % snrs[i]).center(9))
-        if use_notes:
-            sys.stdout.write("%s" % notes[i])
-        sys.stdout.write("\n")
+    print "\tTotal number of pulses searched: %s" % numpulses
+    print "\tNumber of pulses thrown out: %s (%5.2f%%)" % (nummasked, \
+                float(nummasked)/numpulses*100)
+    print "\tNumber of good pulses found: %s (%5.2f%%)" % (len(pulses), \
+                float(len(pulses))/numpulses*100)
+    if len(pulses) > 0:
+        use_snrs = ""
+        use_notes = ""
+        if snrs is not None and len(snrs) == len(pulses):
+            use_snrs = "SNR"
+        if notes is not None and len(notes) == len(pulses):
+            use_notes = "Notes"
+        print "%s%s%s%s%s%s" % ("#".center(7), "MJD".center(15), \
+                                    "Time".center(11), "Duration".center(13), \
+                                    use_snrs.center(9), use_notes)
+        for i, pulse in enumerate(pulses):
+            sys.stdout.write(("%d" % pulse.number).center(7))
+            sys.stdout.write(("%5.4f" % pulse.mjd).center(15))
+            sys.stdout.write(("%5.2f" % pulse.time).center(11))
+            sys.stdout.write(("%2.4f" % pulse.duration).center(13))
+            if use_snrs:
+                sys.stdout.write(("%4.2f" % snrs[i]).center(9))
+            if use_notes:
+                sys.stdout.write("%s" % notes[i])
+            sys.stdout.write("\n")
    
 
 def plot_pulses(pulses, timeseries, downfactor=1):
