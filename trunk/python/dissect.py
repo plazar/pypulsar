@@ -171,10 +171,7 @@ def main():
                 ##print "Writing TOA" ##
                 # Interpolate and downsample current_pulse so
                 # it is same size as template profile
-                downsamp = int(current_pulse.N/template.size)+1
-                interp = downsamp*template.size
-                current_pulse.interpolate(interp)
-                current_pulse.downsample(downsamp)
+                current_pulse.interp_and_downsamp(template.size)
                 ##print current_pulse.N, len(current_pulse.profile)
                 ##print len(template)
                 write_toa(current_pulse, polycos, template, timeseries, \

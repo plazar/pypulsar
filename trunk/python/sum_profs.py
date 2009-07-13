@@ -69,7 +69,8 @@ if __name__=='__main__':
     postsum_group.add_option('--smooth', dest='smooth', type='int', action='callback', callback=register_post_sum_processing, help="Smooth profile using a boxcar of given width.")
     postsum_group.add_option('--detrend', dest='detrend', type='int', action='callback', callback=register_post_sum_processing, help="Break profile into N chunks (where N is provided on command line) and subtract a linear trend from each chunk.")
     postsum_group.add_option('--interpolate', dest='interpolate', type='int', action='callback', callback=register_post_sum_processing, help="Interpolate profile so it has N bins across it (where N is provided on the command line).")
+    postsum_group.add_option('--interp-downsamp', dest='interp_and_downsamp', type='int', action='callback', callback=register_post_sum_processing, help="Interpolate then downsample profile so that it has N bins across it (where N is provided on the command line). Profile will be interpolated to nearest multiple of N larger than current size before downsampling.")
     parser.add_option_group(postsum_group)
-    
+
     options, args = parser.parse_args()
     main()
