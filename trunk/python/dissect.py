@@ -52,7 +52,9 @@ def main():
             options.shift_phase += 1.0
     else:
         shift_time = 0.0
-        
+
+    print "Searching %s for single pulses." % timeseries.datfn
+
     if options.parfile is not None:
         print "Using parfile: %s" % options.parfile
         # generate polycos
@@ -98,6 +100,9 @@ def main():
         get_period = lambda mjd: options.period
     else:
         raise "Unknown option for reading periods!"
+
+    print "On-pulse regions will be set to: %s" % \
+            ','.join(['%s:%s' % t for t in options.on_pulse_regions])
 
     # Loop over pulses in timeseries. Examine pulses one at a time.
     good_pulses = []
@@ -152,6 +157,7 @@ def main():
 
     if (options.polycofile is not None or options.parfile is not None) and \
                 options.write_toas and len(good_pulses) > 0:
+        numtoas = 0
         print "Generating TOAs. Please wait..."
         # Extract second column from template file
         # First column is index
@@ -176,7 +182,9 @@ def main():
                 ##print len(template)
                 write_toa(current_pulse, polycos, template, timeseries, \
                             prof_start_phase)
+                numtoas += 1
                 current_pulse = None
+        print "Number of TOAs: %d" % numtoas
 
 
 def write_toa(summed_pulse, polycos, template_profile, \
