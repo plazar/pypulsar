@@ -5,16 +5,18 @@
 #
 #           Patrick Lazarus, Feb 26th, 2009
 
-import pylab as p
-import numpy as np
-import residuals
-import parfile as par
-import binary_psr
 import optparse
 import sys
-import slalib
 import re
 import os
+import types
+import warnings
+import pylab as p
+import numpy as np
+import slalib
+import binary_psr
+import parfile as par
+import residuals
 
 class resid:
     def __init__(self):
@@ -31,7 +33,7 @@ class resid:
             self.residuals = residuals.read_residuals_64bit()
         
         # Open tempo.lis. Parse it and find input .tim and .par files. Also find output .par file.
-        inputfiles_re = re.compile(r"Input data from (.*\.tim),  Parameters from (.*\.par)")
+        inputfiles_re = re.compile(r"Input data from (.*\.tim.*),  Parameters from (.*\.par.*)")
         outputfile_re = re.compile(r"Assumed parameters -- PSR (.*)$")
         tempolisfile = open("tempo.lis")
         intimfn, inparfn, outparfn = None, None, None
@@ -112,7 +114,8 @@ class resid:
         TOAcount = 0
         for lo,hi in self.freqbands:
             indices = (self.residuals.bary_freq>=lo) & (self.residuals.bary_freq<hi)
-            p.errorbar(xaxis[indices], yaxis[indices], yerr=yerror[indices], fmt='.', label="%s - %s MHz" % (lo, hi))
+            p.errorbar(xaxis[indices], yaxis[indices], yerr=yerror[indices], \
+                        fmt='.', label="%s - %s MHz" % (lo, hi), picker=5)
             TOAcount += xaxis[indices].size
         # Finish off the plot
         p.axhline(0, ls='--', label="_nolegend_", c='k', lw=0.5)
@@ -139,7 +142,9 @@ class resid:
         # Register event callback function and show the plot
         if self.options.legend:
             p.legend(loc='best')
-        cid = fig.canvas.mpl_connect('key_press_event', keypress)
+        warnings.warn("Click-on-TOA functionality isn't fully implemented. Only works if all TOAs shown in same frequency interval.")
+        cid_keypress = fig.canvas.mpl_connect('key_press_event', keypress)
+        cid_pick = fig.canvas.mpl_connect('pick_event', pick)
         if self.options.interactive:
             p.ion()
             p.show()
@@ -192,11 +197,27 @@ def quit():
     print "Quiting..."
     sys.exit(0)
 
+
+def pick(event):
+    global r
+    index = event.ind
+    if len(index)==1:
+        print index
+        print "TOA (MJD):", r.residuals.bary_TOA[index]
+        print "Post-fit residual (sec):", r.residuals.postfit_sec[index]
+        print "Uncertainty (sec):", r.residuals.uncertainty[index]
+        print "Frequency (MHz):", r.residuals.bary_freq[index]
+    else:
+        print "Multiple TOAs selected. Zoom in and try again."
+
+
 def keypress(event):
-    if event.key.lower()=='q':
-        quit()
-    elif event.key.lower()=='s':
-        savefigure()
+    if type(event.key) == types.StringType:
+        if event.key.lower()=='q':
+            quit()
+        elif event.key.lower()=='s':
+            savefigure()
+
 
 def mjd_to_year(mjds):
     mjds = np.asarray(mjds)
@@ -210,6 +231,7 @@ def mjd_to_year(mjds):
     return (years + (days + fracs) / daysperyear)
 
 def main():
+    global r
     r = resid()
     r.plot()
     
