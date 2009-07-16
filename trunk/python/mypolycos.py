@@ -77,24 +77,25 @@ class polyco:
         return self.F0 + psrfreq/60.0
         
 class polycos:
-    def __init__(self, psrname, filenm="polyco.dat"):
-        self.psr = psrname
+    def __init__(self, filenm="polyco.dat"):
         self.file = filenm
         self.polycos = []
         self.TMIDs = []
         infile = open(filenm, "r")
         tmppoly = polyco(infile)
+        psrname = tmppoly.psr
         while(tmppoly.psr):
 	    if (len(self.polycos)):
                 if (tmppoly.dataspan != self.dataspan):
                     sys.stderr.write("Data span is changing!\n")
+                if (tmppoly.psr != psrname):
+                    sys.stderr.write("Multiple PSRs in same polycos file!\n")    
             else:
                 self.dataspan = tmppoly.dataspan
-            if (tmppoly.psr==psrname):
-                self.polycos.append(tmppoly)
-                self.TMIDs.append(tmppoly.TMID)
+            self.polycos.append(tmppoly)
+            self.TMIDs.append(tmppoly.TMID)
             tmppoly = polyco(infile)
-        sys.stderr.write("Read %d polycos for PSR %s\n" % (len(self.polycos), psrname))
+        print "Read %d polycos\n" % len(self.polycos)
         self.TMIDs = Num.asarray(self.TMIDs)
         infile.close()
         self.validrange = 0.5*self.dataspan/1440.0
@@ -172,7 +173,7 @@ def create_polycos(par, infdata):
                         stderr=subprocess.PIPE)
     (out, err) = tempo.communicate("%d %d\n" % (int(infdata.epoch), \
                                         int(infdata.epoch+obslength)+1))
-    new_polycos = polycos(par.PSR)
+    new_polycos = polycos(filenm='polyco.dat')
     # Remove files created by us and by TEMPO
     os.remove("tz.in")
     os.remove("polyco.dat")
