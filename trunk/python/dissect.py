@@ -159,6 +159,8 @@ def main():
                 options.write_toas and len(good_pulses) > 0:
         numtoas = 0
         print "Generating TOAs. Please wait..."
+        print "TOA threshold:", options.toa_threshold
+        print "Profile template used:", options.template
         # Extract second column from template file
         # First column is index
         template = np.loadtxt(options.template, usecols=(1,))
@@ -195,14 +197,23 @@ def write_toa(summed_pulse, polycos, template_profile, \
         'start_phase' is the phase at the start of the profile.
     """
     if template_profile is None:
-        raise "A templete profile MUST be provided! ... need proper exception."
+        raise "A template profile MUST be provided! ... need proper exception."
     # This code is taken from Scott Ransom's PRESTO's get_TOAs.py
     mjdi = int(summed_pulse.mjd) # integer part of MJD
     mjdf = summed_pulse.mjd - mjdi # fractional part of MJD
     (phs, freq) = polycos.get_phs_and_freq(mjdi, mjdf)
     phs -= start_phase
     period = 1.0/freq
-    t0f = mjdf - phs*period/psr_utils.SECPERDAY
+    
+    # Caclulate offset due to shifting channels to account for DM
+    hifreq = timeseries.infdata.lofreq - timeseries.infdata.chan_width/2.0 + \
+                timeseries.infdata.BW
+    midfreq = timeseries.infdata.lofreq + timeseries.infdata.BW/2.0
+    dmdelay = psr_utils.delay_from_DM(timeseries.infdata.DM, midfreq) - \
+              psr_utils.delay_from_DM(timeseries.infdata.DM, hifreq)
+    dmdelay_mjd = dmdelay/float(psr_utils.SECPERDAY)
+
+    t0f = mjdf - phs*period/psr_utils.SECPERDAY + dmdelay_mjd
     t0i = mjdi
     ##print "len(summed), len(template): ", len(summed_pulse.profile), len(template_profile)
     shift,eshift,snr,esnr,b,errb,ngood = measure_phase(summed_pulse.profile, \
