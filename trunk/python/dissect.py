@@ -59,7 +59,6 @@ def main():
         print "Using parfile: %s" % options.parfile
         # generate polycos
         print "Automatically generating polycos..."
-        sys.stdout.flush()
         polycos = mypolycos.create_polycos(options.parfile, timeseries.infdata)
         mjd = timeseries.infdata.epoch
         mjdi = int(mjd) # integer part of mjd
@@ -78,8 +77,8 @@ def main():
         get_period = lambda mjd: 1.0/polycos.get_phs_and_freq(int(mjd), \
                                                                mjd-int(mjd))[1]
     elif options.polycofile is not None:
-        raise NotImplementedError("--use-polycos option in dissect.py is not implemented yet")
         print "Using polycos file: %s" % options.polycos
+        polycos = mypolycos.polycos(options.polycos)
         mjd = timeseries.infdata.epoch
         mjdi = int(mjd) # integer part of mjd
         mjdf = mjd-mjdi # fractional part of mjd
@@ -93,6 +92,9 @@ def main():
             shift_time = shift_phase * 1.0/freq
         else:
             prof_start_phase = phase
+        # get periods from polycos
+        get_period = lambda mjd: 1.0/polycos.get_phs_and_freq(int(mjd), \
+                                                               mjd-int(mjd))[1]
     elif options.period is not None:
         print "Using constant period: %f" % options.period
         if options.shift_phase != 0.0:
