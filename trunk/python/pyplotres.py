@@ -11,27 +11,18 @@ import re
 import os
 import types
 import warnings
-import pylab as p
+import matplotlib.pyplot as plt
 import numpy as np
 import slalib
 import binary_psr
 import parfile as par
 import residuals
 
-class resid:
-    def __init__(self):
-        # Read TEMPO results (resid2.tmp, tempo.lis, timfile and parfiles)
-        
-        # Read residuals
-        # Need to check if on 32-bit or 64-bit computer
-        # (the following is a hack to find out if we're on a borg or borgii node)
-        if os.uname()[4]=='i686':
-            # 32-bit computer
-            self.residuals = residuals.read_residuals()
-        else:
-            # 64-bit computer
-            self.residuals = residuals.read_residuals_64bit()
-        
+class TempoResults:
+    def __init__(self, freqbands=[[0, 'inf']]):
+        """Read TEMPO results (resid2.tmp, tempo.lis, timfile and parfiles)
+            freqbands is a list of frequency pairs to display.
+        """
         # Open tempo.lis. Parse it and find input .tim and .par files. Also find output .par file.
         inputfiles_re = re.compile(r"Input data from (.*\.tim.*),  Parameters from (.*\.par.*)")
         outputfile_re = re.compile(r"Assumed parameters -- PSR (.*)$")
@@ -55,143 +46,239 @@ class resid:
         self.inpar = par.psr_par(inparfn)
         self.outpar = par.psr_par(outparfn)
         
-        self.parse_options()
+        # Read residuals
+        # Need to check if on 32-bit or 64-bit computer
+        # (the following is a hack to find out if we're on a borg or borgii node)
+        if os.uname()[4]=='i686':
+            # 32-bit computer
+            r = residuals.read_residuals()
+        else:
+            # 64-bit computer
+            r = residuals.read_residuals_64bit()
+
+        self.max_TOA = r.bary_TOA.max()
+        self.min_TOA = r.bary_TOA.min()
+        self.freqbands = freqbands 
+        self.residuals = {}
+        for lo,hi in self.freqbands:
+            indices = (r.bary_freq>=lo) & (r.bary_freq<hi)
+            self.residuals[get_freq_label(lo, hi)] = \
+                 Resids(r.bary_TOA[indices], r.bary_freq[indices], \
+                        np.arange(r.numTOAs)[indices], r.orbit_phs[indices], \
+                        r.postfit_phs[indices], r.postfit_sec[indices], \
+                        r.prefit_phs[indices], r.prefit_sec[indices], \
+                        r.uncertainty[indices], r.weight[indices], \
+                        self.inpar, self.outpar)
+
+
+class Resids:
+    """The Resids object contains the following information
+        about TEMPO residuals:
+            bary_TOA
+            bary_freq
+            numTOAs
+            orbit_phs
+            postfit_phs
+            postfit_sec
+            prefit_phs
+            prefit_sec
+            uncertainty
+            weight
+    """
+    def __init__(self, bary_TOA, bary_freq, TOA_index, orbit_phs, \
+                    postfit_phs, postfit_sec, prefit_phs, prefit_sec, \
+                    uncertainty, weight, inpar, outpar):
+        self.bary_TOA = bary_TOA
+        self.bary_freq = bary_freq
+        self.TOA_index = TOA_index
+        self.orbit_phs = orbit_phs
+        self.postfit_phs = postfit_phs
+        self.postfit_sec = postfit_sec
+        self.prefit_phs = prefit_phs
+        self.prefit_sec = prefit_sec
+        self.uncertainty = uncertainty
+        self.weight = weight
+        self.inpar = inpar
+        self.outpar = outpar
         
-    def plot(self):
-        xopt = self.options.xaxis.lower()
+
+    def get_xdata(self, key):
+        """Return label describing xaxis and the corresponding 
+            data given keyword 'key'.
+        """
+        if type(key) != types.StringType:
+            raise "Resids.get_xdata's argument must be a string!"
+        xopt = key.lower()
         if xopt == 'numtoa':
-            xaxis = np.arange(self.residuals.numTOAs)
+            xdata = self.TOA_index
             xlabel = "TOA Number"
         elif xopt == 'mjd':
-            xaxis = self.residuals.bary_TOA
+            xdata = self.bary_TOA
             xlabel = "MJD"
         elif xopt == 'orbitphase':
-            xaxis = self.residuals.orbit_phs
+            xdata = self.orbit_phs
             xlabel = "Orbital Phase"
         elif xopt == 'year':
-            xaxis = mjd_to_year(self.residuals.bary_TOA)
+            xdata = mjd_to_year(self.bary_TOA)
             xlabel = "Year"
         else:
-            raise "How did you squeek through: options.xaxis = %s" % options.xaxis
+            raise "How did you squeek through: key = %s" % key
+        return (xlabel, xdata)
 
-        yopt = self.options.yaxis.lower()
-        if self.options.postfit:
-            title = "Postfit Residuals"
+    
+    def get_ydata(self, key, postfit=True):
+        """Return label describing yaxis and the corresponding 
+            data/errors given keyword 'key'.
+            'postfit' is a boolean argument that determines if
+            postfit, or prefit data is to be returned.
+        """
+        if type(key) != types.StringType:
+            raise "Resids.get_ydata's argument must be a string!"
+        yopt = key.lower()
+        if postfit:
             if yopt == 'phase':
-                yaxis = self.residuals.postfit_phs
-                yerror = self.residuals.uncertainty/self.outpar.P0 # NOTE: Should use P at TOA not at PEPOCH
+                ydata = self.postfit_phs
+                #
+                # NOTE: Should use P at TOA not at PEPOCH
+                #
+                yerror = self.uncertainty/self.outpar.P0 
                 ylabel = "Residuals (Phase)"
             elif yopt == 'usec':
-                yaxis = self.residuals.postfit_sec*1e6
-                yerror = self.residuals.uncertainty*1e6
+                ydata = self.postfit_sec*1e6
+                yerror = self.uncertainty*1e6
                 ylabel = "Residuals (uSeconds)"
             elif yopt == 'sec':
-                yaxis = self.residuals.postfit_sec
-                yerror = self.residuals.uncertainty
+                ydata = self.postfit_sec
+                yerror = self.uncertainty
                 ylabel = "Residuals (Seconds)"
             else:
                 raise "How did you squeek through: options.yaxis = %s" % options.yaxis
         else:
-            title = "Prefit Residuals"
             if yopt=='phase':
-                yaxis = self.residuals.prefit_phs
-                yerror = self.residuals.uncertainty/self.inpar.P0 # NOTE: Should use P at TOA not at PEPOCH
+                ydata = self.prefit_phs
+                #
+                # NOTE: Should use P at TOA not at PEPOCH
+                #
+                yerror = self.uncertainty/self.inpar.P0 
                 ylabel = "Residuals (Phase)"
             elif yopt=='usec':
-                yaxis = self.residuals.prefit_sec*1e6
-                yerror = self.residuals.uncertainty*1e6
+                ydata = self.prefit_sec*1e6
+                yerror = self.uncertainty*1e6
                 ylabel = "Residuals (uSeconds)"
             elif yopt=='sec':
-                yaxis = self.residuals.prefit_sec
-                yerror = self.residuals.uncertainty
+                ydata = self.prefit_sec
+                yerror = self.uncertainty
                 ylabel = "Residuals (Seconds)"
             else:
                 raise "How did you squeek through: options.yaxis = %s" % options.yaxis
-        
-        # Set up the plot
-        fig = p.figure(figsize=(11,8.5))
-        # Plot the residuals
+        return (ylabel, ydata, yerror)
+
+
+def plot(tempo_results, xkey, ykey, postfit=True, prefit=False, \
+            interactive=True, mark_peri=False, show_legend=True):
+    # Set up the plot
+    fig = plt.figure(figsize=(11,8.5))
+    
+    # figure out what should be plotted
+    # True means to plot postfit
+    # False means to plot prefit
+    if postfit and prefit:
+        to_plot_postfit = [False, True]
+    elif postfit and not prefit:
+        to_plot_postfit = [True]
+    elif not postfit and prefit:
+        to_plot_postfit = [False]
+    else:
+        raise "At least one of prefit and postfit must be True when calling plot(...)."
+    subplot = 1
+    numsubplots = len(to_plot_postfit)
+    axes = []
+    handles = []
+    labels = []
+    for usepostfit in to_plot_postfit:
         TOAcount = 0
-        for lo,hi in self.freqbands:
-            indices = (self.residuals.bary_freq>=lo) & (self.residuals.bary_freq<hi)
-            p.errorbar(xaxis[indices], yaxis[indices], yerr=yerror[indices], \
-                        fmt='.', label="%s - %s MHz" % (lo, hi), picker=5)
-            TOAcount += xaxis[indices].size
+        # All subplots are in a single column
+        if subplot == 1:
+            axes.append(plt.subplot(numsubplots, 1, subplot))
+        else:
+            axes.append(plt.subplot(numsubplots, 1, subplot, sharex=axes[0]))
+        
+        for lo,hi in tempo_results.freqbands:
+            freq_label = get_freq_label(lo, hi)
+            resids = tempo_results.residuals[freq_label]
+            xlabel, xdata = resids.get_xdata(xkey)
+            ylabel, ydata, yerr = resids.get_ydata(ykey, usepostfit)
+            if len(xdata):
+                # Plot the residuals
+                handle = plt.errorbar(xdata, ydata, yerr=yerr, fmt='.', \
+                                        label=freq_label, picker=5)
+                if subplot == 1:
+                    handles.append(handle[0])
+                    labels.append(freq_label)
+                TOAcount += xdata.size
         # Finish off the plot
-        p.axhline(0, ls='--', label="_nolegend_", c='k', lw=0.5)
-        if self.options.mark_peri:
-            if self.options.postfit:
-                binpsr = binary_psr.binary_psr(self.outpar.FILE)
+        plt.axhline(0, ls='--', label="_nolegend_", c='k', lw=0.5)
+        axes[-1].ticklabel_format(style='plain', axis='x')
+       
+        if mark_peri and hasattr(tempo_results.outpar, 'BINARY'):
+            # Be sure to check if pulsar is in a binary
+            # Cannot mark passage of periastron if not a binary 
+            if usepostfit:
+                binpsr = binary_psr.binary_psr(tempo_results.outpar.FILE)
             else:
-                binpsr = binary_psr.binary_psr(self.inpar.FILE)
-            xmin, xmax = p.xlim()
-            mjd_min = self.residuals.bary_TOA.min()
-            mjd_max = self.residuals.bary_TOA.max()
-            guess_mjds = np.arange(mjd_max + binpsr.par.PB, mjd_min - binpsr.par.PB, -binpsr.par.PB)
+                binpsr = binary_psr.binary_psr(tempo_results.inpar.FILE)
+            xmin, xmax = plt.xlim()
+            mjd_min = tempo_results.min_TOA
+            mjd_max = tempo_results.max_TOA
+            guess_mjds = np.arange(mjd_max + binpsr.par.PB, \
+                                mjd_min - binpsr.par.PB, -binpsr.par.PB)
             for mjd in guess_mjds:
                 peri_mjd = binpsr.most_recent_peri(float(mjd))
                 if xopt == 'mjd':
-                    p.axvline(peri_mjd, ls=':', label='_nolegend_', c='k', lw=0.5)
+                    plt.axvline(peri_mjd, ls=':', label='_nolegend_', c='k', lw=0.5)
                 elif xopt == 'year':
                     print "plotting peri passage"
-                    p.axvline(mjd_to_year(peri_mjd), ls=':', label='_nolegend_', c='k', lw=0.5)
-            p.xlim((xmin, xmax))
-        p.xlabel(xlabel)
-        p.ylabel(ylabel)
-        p.title(title + " (Number of TOAs: %d)" % TOAcount)
-        # Register event callback function and show the plot
-        if self.options.legend:
-            p.legend(loc='best')
-        warnings.warn("Click-on-TOA functionality isn't fully implemented. Only works if all TOAs shown in same frequency interval.")
-        cid_keypress = fig.canvas.mpl_connect('key_press_event', keypress)
-        cid_pick = fig.canvas.mpl_connect('pick_event', pick)
-        if self.options.interactive:
-            p.ion()
-            p.show()
+                    plt.axvline(mjd_to_year(peri_mjd), ls=':', label='_nolegend_', c='k', lw=0.5)
+            plt.xlim((xmin, xmax))
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
+        if usepostfit:
+            plt.title("Postfit Redisuals (Number of TOAs: %d)" % TOAcount)
         else:
-            # Save figure and quit
-            savefigure()
-            quit()
+            plt.title("Prefit Redisuals (Number of TOAs: %d)" % TOAcount)
+        subplot += 1
+    
+    if numsubplots > 1:
+        # Increase spacing between subplots.
+        plt.subplots_adjust(hspace=0.25)
+    
+    # Register event callback function and show the plot
+    if show_legend:
+        leg = plt.figlegend(handles, labels, 'upper right')
+        frame = leg.get_frame()
+        frame.set(alpha=0.5)
+    cid_keypress = fig.canvas.mpl_connect('key_press_event', keypress)
+    cid_pick = fig.canvas.mpl_connect('pick_event', pick)
+    if interactive:
+        plt.ion()
+        plt.show()
+    else:
+        # Save figure and quit
+        savefigure()
+        quit()
 
-    def parse_options(self):
-        if __name__ == '__main__':
-            (self.options, arguments) = parser.parse_args()
-        else:
-            (self.options, arguments) = parser.parse_args([])
-        
-        if not self.options.freqs:
-            freqbands = [['0', 'inf']]
-        else:
-            freqbands = []
-            for fopt in self.options.freqs:
-                f = fopt.split(':')
-                if f[0]=='':
-                    f[0] = '0'
-                if f[-1]=='':
-                    f[-1] = 'inf'
-                if len(f) > 2:
-                    for i in range(0, len(f)-1):
-                        freqbands.append(f[i:i+2])
-                else:
-                    freqbands.append(f)
-        freqbands = np.array(freqbands).astype(float)
-        freqbands[freqbands.argsort(axis=0).transpose()[0]]
-        if np.any(freqbands.flat != sorted(freqbands.flat)):
-            raise "Frequency bands provided have overlaps or are inverted. Exiting!"
-        self.freqbands = freqbands
-       
-        if not hasattr(self.outpar, 'BINARY'):
-            # Cannot mark passage of periastron if pulsar is not in a binary
-            self.options.mark_peri = False
-       
-        if self.options.xaxis.lower() not in ['numtoa', 'mjd', 'orbitphase', 'year']:
-            raise "Option to -x/--x-axis (%s) is not permitted. Exiting!" % self.options.xaxis
-        if self.options.yaxis.lower() not in ['phase', 'usec', 'sec']:
-            raise "Option to -y/--y-axis (%s) is not permitted. Exiting!" % self.options.yaxis
+
+def get_freq_label(lo, hi):
+    """Return frequency label given a lo and hi
+        frequency pair.
+    """
+    return "%s - %s MHz" % (lo, hi)
+
 
 def savefigure(savefn='./resid2.tmp.ps'):
         print "Saving plot to %s" % savefn
-        p.savefig(savefn, orientation='landscape', papertype='letter')
+        plt.savefig(savefn, orientation='landscape', papertype='letter')
+
 
 def quit():
     print "Quiting..."
@@ -199,25 +286,65 @@ def quit():
 
 
 def pick(event):
-    global r
+    global tempo_results
     index = event.ind
-    if len(index)==1:
-        print index
-        print "TOA (MJD):", r.residuals.bary_TOA[index]
-        print "Post-fit residual (sec):", r.residuals.postfit_sec[index]
-        print "Uncertainty (sec):", r.residuals.uncertainty[index]
-        print "Frequency (MHz):", r.residuals.bary_freq[index]
+    if event.mouseevent.inaxes:
+        ylabel = event.mouseevent.inaxes.get_ylabel()
+        title = event.mouseevent.inaxes.get_title()
+    if len(index) == 1:
+        freq_label = event.artist.get_label()
+        r = tempo_results.residuals[freq_label]
+        print "TOA Selected:"
+        print "\tNumber:", r.TOA_index[index][0]
+        print "\tEpoch (MJD):", r.bary_TOA[index][0]
+        if "(Phase)" in ylabel:
+            print "\tPre-fit residual (phase):", r.prefit_phs[index][0]
+            print "\tPost-fit residual (phase):", r.postfit_phs[index][0]
+            if "Prefit" in title:
+                print "\tUncertainty (phase):", r.uncertainty[index][0]/r.inpar.P0
+            elif "Postfit" in title:
+                print "\tUncertainty (phase):", r.uncertainty[index][0]/r.outpar.P0
+            else:
+                raise "Unknown of pre/post-fit from title in pick(): %s" % title
+        elif "(uSeconds)" in ylabel:
+            print "\tPre-fit residual (usec):", r.prefit_sec[index][0]*1e6
+            print "\tPost-fit residual (usec):", r.postfit_sec[index][0]*1e6
+            print "\tUncertainty (usec):", r.uncertainty[index][0]*1e6
+        elif "(Seconds)" in ylabel:
+            print "\tPre-fit residual (sec):", r.prefit_sec[index][0]
+            print "\tPost-fit residual (sec):", r.postfit_sec[index][0]
+            print "\tUncertainty (sec):", r.uncertainty[index][0]
+        else:
+            raise "Unknown unit for y-axes in pick(): %s" % ylabel
+        print "\tFrequency (MHz):", r.bary_freq[index][0]
     else:
         print "Multiple TOAs selected. Zoom in and try again."
 
 
 def keypress(event):
     if type(event.key) == types.StringType:
-        if event.key.lower()=='q':
+        
+        if event.key.lower() == 'q':
             quit()
-        elif event.key.lower()=='s':
+        elif event.key.lower() == 's':
             savefigure()
-
+        elif event.key.lower() == 'z':
+            # Turn on zoom mode
+            print "Toggling zoom mode..."
+            event.canvas.toolbar.zoom()
+        elif event.key.lower() == ' ':
+            # Restore plot to original view
+            print "Restoring plot..."
+            event.canvas.toolbar.home()
+        elif event.key.lower() == ',' or event.key.lower() == '<':
+            # Go back to previous plot view
+            print "Going back..."
+            event.canvas.toolbar.back()
+        elif event.key.lower() == '.' or event.key.lower() == '>':
+            # Go forward to next plot view
+            print "Going forward..."
+            event.canvas.toolbar.forward()
+            
 
 def mjd_to_year(mjds):
     mjds = np.asarray(mjds)
@@ -230,18 +357,61 @@ def mjd_to_year(mjds):
     mjds.shape = old_shape # Change back to original shape
     return (years + (days + fracs) / daysperyear)
 
-def main():
-    global r
-    r = resid()
-    r.plot()
+
+def parse_options():
+    (options, sys.argv) = parser.parse_args()
     
+    if not options.freqs:
+        freqbands = [['0', 'inf']]
+    else:
+        freqbands = []
+        for fopt in options.freqs:
+            f = fopt.split(':')
+            if f[0]=='':
+                f[0] = '0'
+            if f[-1]=='':
+                f[-1] = 'inf'
+            if len(f) > 2:
+                for i in range(0, len(f)-1):
+                    freqbands.append(f[i:i+2])
+            else:
+                freqbands.append(f)
+    freqbands = np.array(freqbands).astype(float)
+    freqbands[freqbands.argsort(axis=0).transpose()[0]]
+    if np.any(freqbands.flat != sorted(freqbands.flat)):
+        raise "Frequency bands provided have overlaps or are inverted. Exiting!"
+    options.freqbands = freqbands
+   
+    options.mark_peri = False
+   
+    if not options.prefit and not options.postfit:
+        # If neither prefit or postfit are selected
+        # show postfit
+        options.postfit = True
+   
+    if options.xaxis.lower() not in ['numtoa', 'mjd', 'orbitphase', 'year']:
+        raise "Option to -x/--x-axis (%s) is not permitted. Exiting!" % options.xaxis
+    if options.yaxis.lower() not in ['phase', 'usec', 'sec']:
+        raise "Option to -y/--y-axis (%s) is not permitted. Exiting!" % options.yaxis
+    return options
+
+
+def main():
+    global tempo_results
+    options = parse_options()
+    tempo_results = TempoResults(options.freqbands)
+    plot(tempo_results, options.xaxis, options.yaxis, options.postfit, \
+            options.prefit, options.interactive, options.mark_peri, \
+            options.legend)
+   
+   
 if __name__=='__main__':
     parser = optparse.OptionParser()
     parser.add_option('-f', '--freq', dest='freqs', action='append', help="Band of frequencies, in MHz, to be plotted (format xxx:yyy). Each band will have a different colour. Multiple -f/--freq options are allowed. (Default: Plot all frequencies in single colour.)", default=[])
     parser.add_option('-x', '--x-axis', dest='xaxis', type='string', help="Values to plot on x-axis. Must be one of {'numTOA', 'MJD', 'orbitphase', 'year'}. (Default: 'MJD')", default='MJD')
     parser.add_option('-y', '--y-axis', dest='yaxis', type='string', help="Values to plot on y-axis. Must be one of {'phase', 'usec', 'sec'}. (Default: 'phase')", default='phase')
-    parser.add_option('--post', dest='postfit', action='store_true', help="Show postfit residuals. (Default: Plot postfit)", default=True)
-    parser.add_option('--pre', dest='postfit', action='store_false', help="Show prefit residuals. (Default: Plot postfit.)")
+    parser.add_option('--post', dest='postfit', action='store_true', help="Show postfit residuals. (Default: Don't show postfit.)", default=False)
+    parser.add_option('--pre', dest='prefit', action='store_true', help="Show prefit residuals. (Default: Don't show prefit.)", default=False)
     parser.add_option('-l', '--legend', dest='legend', action='store_true', help="Show legend of frequencies. (Default: Do not show legend.)", default=False)
     parser.add_option('--mark-peri', dest='mark_peri', action='store_true', help="Mark passage of periastron. (Default: don't mark periastron.)", default=False)
     parser.add_option('--non-interactive', dest='interactive', action='store_false', help="Save figure and exit. (Default: Show plot, only save if requested.)", default=True)
