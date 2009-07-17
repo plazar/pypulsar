@@ -174,11 +174,8 @@ class Resids:
         return (ylabel, ydata, yerror)
 
 
-def plot(tempo_results, xkey, ykey, postfit=True, prefit=False, \
+def plot_data(tempo_results, xkey, ykey, postfit=True, prefit=False, \
             interactive=True, mark_peri=False, show_legend=True):
-    # Set up the plot
-    fig = plt.figure(figsize=(11,8.5))
-    
     # figure out what should be plotted
     # True means to plot postfit
     # False means to plot prefit
@@ -252,11 +249,21 @@ def plot(tempo_results, xkey, ykey, postfit=True, prefit=False, \
         # Increase spacing between subplots.
         plt.subplots_adjust(hspace=0.25)
     
-    # Register event callback function and show the plot
     if show_legend:
         leg = plt.figlegend(handles, labels, 'upper right')
         frame = leg.get_frame()
         frame.set(alpha=0.5)
+    
+
+def create_plot(tempo_results, xkey, ykey, postfit=True, prefit=False, \
+            interactive=True, mark_peri=False, show_legend=True):
+    # Set up the plot
+    fig = plt.figure(figsize=(11,8.5))
+   
+    plot_data(tempo_results, xkey, ykey, postfit, prefit, \
+            mark_peri, show_legend)
+    
+    # Register event callbacks function and show the plot
     cid_keypress = fig.canvas.mpl_connect('key_press_event', keypress)
     cid_pick = fig.canvas.mpl_connect('pick_event', pick)
     if interactive:
@@ -322,6 +329,8 @@ def pick(event):
 
 
 def keypress(event):
+    global tempo_results
+    global options
     if type(event.key) == types.StringType:
         
         if event.key.lower() == 'q':
@@ -332,7 +341,7 @@ def keypress(event):
             # Turn on zoom mode
             print "Toggling zoom mode..."
             event.canvas.toolbar.zoom()
-        elif event.key.lower() == ' ':
+        elif event.key.lower() == 'h':
             # Restore plot to original view
             print "Restoring plot..."
             event.canvas.toolbar.home()
@@ -344,6 +353,14 @@ def keypress(event):
             # Go forward to next plot view
             print "Going forward..."
             event.canvas.toolbar.forward()
+        elif event.key == ' ':
+            # Reload residuals and replot
+            print "Reloading..."
+            plt.clf() # clear figure
+            tempo_results = TempoResults(options.freqbands)
+            plot_data(tempo_results, options.xaxis, options.yaxis, 
+                    options.postfit, options.prefit, options.mark_peri, \
+                    options.legend)
             
 
 def mjd_to_year(mjds):
@@ -398,9 +415,10 @@ def parse_options():
 
 def main():
     global tempo_results
+    global options
     options = parse_options()
     tempo_results = TempoResults(options.freqbands)
-    plot(tempo_results, options.xaxis, options.yaxis, options.postfit, \
+    create_plot(tempo_results, options.xaxis, options.yaxis, options.postfit, \
             options.prefit, options.interactive, options.mark_peri, \
             options.legend)
    
