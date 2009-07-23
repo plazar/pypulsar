@@ -11,8 +11,10 @@ import re
 import os
 import types
 import warnings
+
 import matplotlib.pyplot as plt
 import numpy as np
+
 import slalib
 import binary_psr
 import parfile as par
@@ -106,8 +108,8 @@ class Resids:
         """Return label describing xaxis and the corresponding 
             data given keyword 'key'.
         """
-        if type(key) != types.StringType:
-            raise "Resids.get_xdata's argument must be a string!"
+        if not isinstance(key, types.StringType):
+            raise ValueError("key must be of type string.")
         xopt = key.lower()
         if xopt == 'numtoa':
             xdata = self.TOA_index
@@ -122,7 +124,7 @@ class Resids:
             xdata = mjd_to_year(self.bary_TOA)
             xlabel = "Year"
         else:
-            raise "How did you squeek through: key = %s" % key
+            raise ValueError("Unknown xaxis type (%s)." % xopt)
         return (xlabel, xdata)
 
     
@@ -132,8 +134,8 @@ class Resids:
             'postfit' is a boolean argument that determines if
             postfit, or prefit data is to be returned.
         """
-        if type(key) != types.StringType:
-            raise "Resids.get_ydata's argument must be a string!"
+        if not isinstance(key, types.StringType):
+            raise ValueError("key must be of type string.")
         yopt = key.lower()
         if postfit:
             if yopt == 'phase':
@@ -152,7 +154,7 @@ class Resids:
                 yerror = self.uncertainty
                 ylabel = "Residuals (Seconds)"
             else:
-                raise "How did you squeek through: options.yaxis = %s" % options.yaxis
+                raise ValueError("Unknown yaxis type (%s)." % yopt)
         else:
             if yopt=='phase':
                 ydata = self.prefit_phs
@@ -170,7 +172,7 @@ class Resids:
                 yerror = self.uncertainty
                 ylabel = "Residuals (Seconds)"
             else:
-                raise "How did you squeek through: options.yaxis = %s" % options.yaxis
+                raise ValueError("Unknown yaxis type (%s)." % yopt)
         return (ylabel, ydata, yerror)
 
 
@@ -186,7 +188,7 @@ def plot_data(tempo_results, xkey, ykey, postfit=True, prefit=False, \
     elif not postfit and prefit:
         to_plot_postfit = [False]
     else:
-        raise "At least one of prefit and postfit must be True when calling plot(...)."
+        raise ValueError("At least one of prefit and postfit must be True.")
     subplot = 1
     numsubplots = len(to_plot_postfit)
     axes = []
@@ -251,8 +253,7 @@ def plot_data(tempo_results, xkey, ykey, postfit=True, prefit=False, \
     
     if show_legend:
         leg = plt.figlegend(handles, labels, 'upper right')
-        frame = leg.get_frame()
-        frame.set(alpha=0.5)
+        leg.legendPatch.set_alpha(0.5)
     
 
 def create_plot(tempo_results, xkey, ykey, postfit=True, prefit=False, \
@@ -312,7 +313,7 @@ def pick(event):
             elif "Postfit" in title:
                 print "\tUncertainty (phase):", r.uncertainty[index][0]/r.outpar.P0
             else:
-                raise "Unknown of pre/post-fit from title in pick(): %s" % title
+                raise ValueError("Cannot determine pre/post-fit from title (%s)" % title)
         elif "(uSeconds)" in ylabel:
             print "\tPre-fit residual (usec):", r.prefit_sec[index][0]*1e6
             print "\tPost-fit residual (usec):", r.postfit_sec[index][0]*1e6
@@ -322,7 +323,7 @@ def pick(event):
             print "\tPost-fit residual (sec):", r.postfit_sec[index][0]
             print "\tUncertainty (sec):", r.uncertainty[index][0]
         else:
-            raise "Unknown unit for y-axes in pick(): %s" % ylabel
+            raise ValueError("Unknown unit for y-axes (%s)" % ylabel)
         print "\tFrequency (MHz):", r.bary_freq[index][0]
     else:
         print "Multiple TOAs selected. Zoom in and try again."
@@ -396,7 +397,7 @@ def parse_options():
     freqbands = np.array(freqbands).astype(float)
     freqbands[freqbands.argsort(axis=0).transpose()[0]]
     if np.any(freqbands.flat != sorted(freqbands.flat)):
-        raise "Frequency bands provided have overlaps or are inverted. Exiting!"
+        raise ValueError("Frequency bands have overlaps or are inverted.")
     options.freqbands = freqbands
    
     options.mark_peri = False
@@ -407,9 +408,11 @@ def parse_options():
         options.postfit = True
    
     if options.xaxis.lower() not in ['numtoa', 'mjd', 'orbitphase', 'year']:
-        raise "Option to -x/--x-axis (%s) is not permitted. Exiting!" % options.xaxis
+        raise BadOptionValueError("Option to -x/--x-axis (%s) is not permitted." % \
+                            options.xaxis)
     if options.yaxis.lower() not in ['phase', 'usec', 'sec']:
-        raise "Option to -y/--y-axis (%s) is not permitted. Exiting!" % options.yaxis
+        raise BadOptionValueError("Option to -y/--y-axis (%s) is not permitted." % \
+                            options.yaxis)
     return options
 
 
@@ -421,8 +424,14 @@ def main():
     create_plot(tempo_results, options.xaxis, options.yaxis, options.postfit, \
             options.prefit, options.interactive, options.mark_peri, \
             options.legend)
-   
-   
+
+
+class BadOptionValueError(ValueError):
+    """Bad value passed to option parser.
+    """
+    pass
+
+
 if __name__=='__main__':
     parser = optparse.OptionParser()
     parser.add_option('-f', '--freq', dest='freqs', action='append', help="Band of frequencies, in MHz, to be plotted (format xxx:yyy). Each band will have a different colour. Multiple -f/--freq options are allowed. (Default: Plot all frequencies in single colour.)", default=[])
