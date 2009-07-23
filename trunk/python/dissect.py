@@ -6,11 +6,10 @@ dissect.py
 Cut a timeseries into individual pulses.
 * Can be used with:
     - constant period
-    - polycos (not implemented yet)
-    - parfile (not implemented yet)
+    - polycos
+    - parfile
 * Can dump pulses with SNR above given threshold to:
-    - .bestprof files (not implemented yet)
-    - .dat files (not implemented yet)
+    - .prof files (similar to .bestprof files)
 
 Patrick Lazarus, June 16, 2009
 """
