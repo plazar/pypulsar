@@ -101,7 +101,7 @@ def main():
             shift_time = options.shift_phase * options.period
         get_period = lambda mjd: options.period
     else:
-        raise "Unknown option for reading periods!"
+        raise ValueError("Unknown option for reading periods.")
 
     print "On-pulse regions will be set to: %s" % \
             ','.join(['%s:%s' % t for t in options.on_pulse_regions])
@@ -154,7 +154,8 @@ def main():
             #                timeseries, options.downfactor, \
             #                options.on_pulse_start, options.on_pulse_end)
             print "Making JoyDiv plot..."
-            joy_division_plot(good_pulses, timeseries, options.downfactor)
+            joy_division_plot(good_pulses, timeseries, options.downfactor, \
+                                        options.heightstretch)
 
 
     if (options.polycofile is not None or options.parfile is not None) and \
@@ -168,25 +169,23 @@ def main():
         template = np.loadtxt(options.template, usecols=(1,))
         # Get TOAs and write them to stdout
         current_pulse = None
-        ##print "%d pulses to consider." % len(good_pulses) ##
         for pulse in good_pulses:
             if current_pulse is None:
-                ##print "Creating SummedPulse object" ##
                 current_pulse = pulse.to_summed_pulse()
             else:
-                ##print "Summing pulses" ##
                 current_pulse += pulse
-            ##print "Current SummedPulse has SNR = %f" % get_snr(current_pulse) ##
             if get_snr(current_pulse) > options.toa_threshold:
-                ##print "Writing TOA" ##
                 # Interpolate and downsample current_pulse so
                 # it is same size as template profile
                 current_pulse.interp_and_downsamp(template.size)
-                ##print current_pulse.N, len(current_pulse.profile)
-                ##print len(template)
                 write_toa(current_pulse, polycos, template, timeseries, \
                             prof_start_phase)
                 numtoas += 1
+                if options.write_toa_files:
+                    # TOA profiles are already downfactored
+                    # do not downfactor more when creating plot
+                    current_pulse.plot("TOA%d" % numtoas)
+                    current_pulse.write_to_file("TOA%d" % numtoas)
                 current_pulse = None
         print "Number of TOAs: %d" % numtoas
 
@@ -199,7 +198,7 @@ def write_toa(summed_pulse, polycos, template_profile, \
         'start_phase' is the phase at the start of the profile.
     """
     if template_profile is None:
-        raise "A template profile MUST be provided! ... need proper exception."
+        raise ValueError("A template profile MUST be provided.")
     # This code is taken from Scott Ransom's PRESTO's get_TOAs.py
     mjdi = int(summed_pulse.mjd) # integer part of MJD
     mjdf = summed_pulse.mjd - mjdi # fractional part of MJD
@@ -225,7 +224,7 @@ def write_toa(summed_pulse, polycos, template_profile, \
     tau, tau_err = shift/summed_pulse.N, eshift/summed_pulse.N
     # Note: "error" flags are shift = 0.0 and eshift = 999.0
     if (np.fabs(shift) < 1e-7 and np.fabs(eshift-999.0) < 1e-7):
-        raise "Bad return from FFTFIT! ... Need proper exception"
+        raise FFTFitError("Error in FFTFIT. Bad return values.")
     # Send the TOA to STDOUT
     toaf = t0f + tau*period/float(psr_utils.SECPERDAY)
     newdays = int(np.floor(toaf))
@@ -244,19 +243,10 @@ def measure_phase(profile, template):
         talk at the Royal Society.
     """
     # This code is taken from Scott Ransom's PRESTO's get_TOAs.py
-    ##print "len(template), type(template), template.dtype:", len(template), type(template), template.dtype
-    ##print "template.shape:", template.shape
-    ##print template
     c,amp,pha = fftfit.cprof(template)
     pha1 = pha[0]
     pha = np.fmod(pha-np.arange(1,len(pha)+1)*pha1, 2.0*np.pi)
-    ##print "before fftfit"
-    ##print "len(profile), type(profile), profile.dtype:", len(profile), type(profile), profile.dtype
-    ##print "len(amp), type(amp), amp.dtype:", len(amp), type(amp), amp.dtype
-    ##print "len(pha), type(pha), pha.dtype:", len(pha), type(pha), pha.dtype
     shift,eshift,snr,esnr,b,errb,ngood = fftfit.fftfit(profile,amp,pha)
-    ##print "just after fftfit"
-    ##sys.stdout.flush()
     return shift,eshift,snr,esnr,b,errb,ngood
 
 
@@ -310,28 +300,19 @@ def plot_pulses(pulses, timeseries, downfactor=1):
         Downsample profiles by factor 'downfactor' before plotting.
     """
     for pulse in pulses:
-        copy_of_pulse = pulse.make_copy()
-        # Interpolate before downsampling
-        interp = ((copy_of_pulse.N/downfactor)+1)*downfactor
-        copy_of_pulse.interpolate(interp)
-        copy_of_pulse.downsample(downfactor)
-        plt.figure()
-        plt.plot(copy_of_pulse.profile, 'k-', lw=0.5)
-        plt.xlabel("Profile bin")
-        plt.title("Pulse #%d" % pulse.number)
-        plt.savefig("%s.prof%d.ps" % (timeseries.basefn, pulse.number), \
-                        orientation='landscape')
+        pulse.plot(timeseries.basefn, downfactor)
 
 
-def joy_division_plot(pulses, timeseries, downfactor=1):
+def joy_division_plot(pulses, timeseries, downfactor=1, hgt_mult=1):
     """Plot each pulse profile on the same plot separated
         slightly on the vertical axis.
         'timeseries' is the Datfile object dissected.
         Downsample profiles by factor 'downfactor' before plotting.
+        hgt_mult is a factor to stretch the height of the paper.
     """
     first = True
     ppgplot.pgbeg("%s.joydiv.ps/CPS" % timeseries.basefn, 1, 1)
-    ppgplot.pgpap(10.25, 8.5/11.0) # Letter landscape
+    ppgplot.pgpap(10.25, hgt_mult*8.5/11.0) # Letter landscape
     # ppgplot.pgpap(7.5, 11.7/8.3) # A4 portrait, doesn't print properly
     ppgplot.pgiden()
     ppgplot.pgsci(1)
@@ -545,6 +526,8 @@ def parse_on_pulse_regions(option, opt_str, value, parser):
         on_pulse.append((float(lo), float(hi)))
     setattr(parser.values, option.dest, on_pulse)
 
+class FFTFitError(Exception):
+    pass
 
 if __name__ == '__main__':
     parser = optparse.OptionParser(usage="%prog --use-parfile PARFILE | --use-polycos POLYCOFILE | -p --period PERIOD [options] infile.dat", description="Given a input timeseries (a PRESTO .dat file) dissect it into individual pulses and record the pulses that surpass the signification threshold. Written by Patrick Lazarus.", version="%prog v0.9 (by Patrick Lazarus)", prog="dissect.py")
@@ -559,6 +542,7 @@ if __name__ == '__main__':
     toa_group.add_option('--toas', dest='write_toas', action='store_true', help="Write TOAs to stdout. A TOA for each pulse will be written out unless --toa-threshold is provided, in which case consecutive pulses will be summed until sum profile's SNR surpases threshold.", default=False)
     toa_group.add_option('--template', dest='template', type='string', help="Required option if generating TOAs. This is the template profile to use.", default=None)
     toa_group.add_option('--toa-threshold', dest="toa_threshold", type='float', action='store', help="Threshold SNR for writing out TOAs. (Default: Use value from --threshold).", default=None)
+    toa_group.add_option('--write-toa-files', dest='write_toa_files', action='store_true', help="Write out profiles used for TOAs as text files and postscript plots. (Default: Don't write out TOA profiles).", default=False)
     parser.add_option_group(toa_group)
 
     period_group = optparse.OptionGroup(parser, "Period Determination", "The following options are different methods for determine the spin period of the pulsar. Exactly one of these options must be provided.")
@@ -569,10 +553,12 @@ if __name__ == '__main__':
 
     plot_group = optparse.OptionGroup(parser, "Plotting Options", "The following options affect only the output plots, not the data searching.")
     plot_group.add_option('-d', '--downsample', dest='downfactor', type='int', action='store', help="Down sample profiles by this factor before plotting. (Default: Don't downsample).", default=1)
+    plot_group.add_option('--stretch-height', dest='heightstretch', type='float', action='store', help="Stretch height of JoyDiv plot by this factor. (Default: Do not stretch JoyDiv plot).", default=1)
+    parser.add_option_group(plot_group)
+    
     parser.add_option('--no-pulse-plots', dest='create_plot_files', action='store_false', help="Do not create plots for each significant pulse detected. (Default: create plots).", default=True)
     parser.add_option('--no-joydiv-plot', dest='create_joydiv_plot', action='store_false', help="Do not create Joy Division plot, where every profile is plotted in a single axes separated slightly in the vertical direction. (Default: create JoyDiv plot).", default=True)
 
-    parser.add_option_group(plot_group)
 
     options, args = parser.parse_args()
 

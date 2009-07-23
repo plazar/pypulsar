@@ -13,6 +13,11 @@ import types
 import numpy as np
 import scipy.signal
 
+# Import matplotlib/pyplot and set for non-interactive plots
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
 class Pulse:
     def __init__(self, number, mjd, time, duration, profile, \
                     origfn, dt, on_pulse_regions=None):
@@ -47,11 +52,9 @@ class Pulse:
             self.on_pulse = None
             self.off_pulse = None
 
-
     def __str__(self):
         return "Pulse #: %s\n\tMJD: %0.15f\n\tTime: %8.2f s\n\tDuration: %8.4f s\n" % \
                     (self.number, self.mjd, self.time, self.duration)
-
 
     def set_onoff_pulse_regions(self, on_pulse_regions):
         """Set the on-pulse and off-pulse regions using
@@ -89,7 +92,6 @@ class Pulse:
             off_pulse.shape = (off_pulse.size/2, 2)
             self.off_pulse = off_pulse
 
-
     def get_data(self, regions=None):
         """Return numpy array of data from 'regions' concatenated
             together. 'regions' is a list of 2-tuples. Each 2-tuples
@@ -113,7 +115,6 @@ class Pulse:
             data.append(self.profile[lobin:hibin])
         return np.concatenate(data)
 
-
     def get_on_pulse(self):
         """Return numpy array of on-pulse regions concatenated
             together.
@@ -126,13 +127,11 @@ class Pulse:
         """
         return self.get_data(self.off_pulse) 
 
-
     def make_copy(self):
         """Return a deep copy of 'self'
             (Uses Python's copy.deepcopy(...)).
         """
         return copy.deepcopy(self)
-
 
     def scale(self):
         """Scale 'self'.
@@ -145,7 +144,6 @@ class Pulse:
         # Do scaling
         self.profile -= np.mean(off_pulse_region)
         self.profile /= np.std(off_pulse_region)
-    
     
     def downsample(self, downfactor=1):
         """Downsample profile by adding 'downfactor' adjacent
@@ -192,7 +190,6 @@ class Pulse:
             smooth_prof = scipy.signal.convolve(prof, kernel, 'same')
             self.profile = smooth_prof[smoothfactor:-smoothfactor]
 
-
     def detrend(self, numchunks=5):
         """Break profile into 'numchunks' and remove a linear trend
             from each chunk.
@@ -202,7 +199,6 @@ class Pulse:
         break_points = np.round(np.linspace(0, self.N, numchunks+1))
         self.profile = scipy.signal.detrend(self.profile, bp=break_points)
         
-
     def interpolate(self, numsamples):
         """Interpolate profile so it has 'numsamples' across it.
 
@@ -214,7 +210,6 @@ class Pulse:
         self.dt = self.dt*self.N/float(numsamples)
         self.N = numsamples
 
-
     def interp_and_downsamp(self, numsamples):
         """Interpolate and then downsample profile so it has
             'numsamples' samples when finished.
@@ -225,7 +220,6 @@ class Pulse:
         interp = downsamp*numsamples
         self.interpolate(interp)
         self.downsample(downsamp)
-
 
     def is_masked(self, numchunks=5):
         """Break pulse profile into 'numchunks'. Check each chunk
@@ -242,6 +236,31 @@ class Pulse:
         # No section of profile is flat.
         return False
 
+    def plot(self, basefn=None, downfactor=1):
+        """Plot the pulse profile.
+            'basefn' is base filename to use. Default will
+            be to use same as original data file's name
+            (with the extension).
+            Downsample profiles by factor 'downfactor' before plotting.
+        """
+        #
+        # Assume original filename has an extension
+        # NOTE: This is probably not good to assume.
+        #
+        if basefn is None:
+            basefn, extension = os.path.splitext(self.origfn)
+        copy_of_self = self.make_copy()
+        # Interpolate before downsampling
+        interp = ((copy_of_self.N/downfactor)+1)*downfactor
+        copy_of_self.interpolate(interp)
+        copy_of_self.downsample(downfactor)
+        plt.figure()
+        plt.plot(copy_of_self.profile, 'k-', lw=0.5)
+        plt.xlabel("Profile bin")
+        plt.title("Pulse #%d" % self.number)
+        plt.savefig("%s.prof%d.ps" % (basefn, self.number), \
+                        orientation='landscape')
+            
 
     def write_to_file(self, basefn=None):
         """Dump the pulse to file.
@@ -272,7 +291,6 @@ class Pulse:
             file.write("%-10d %f\n" % (i, val))
         file.close()
 
-
     def to_summed_pulse(self):
         """Create and return a SummedPulse object using
             self as the starting point of the sum.
@@ -283,7 +301,6 @@ class Pulse:
         summed_pulse.scale()
         return summed_pulse
         
-
     def __add__(self, other):
         """Add two Pulse objects.
         """
@@ -377,7 +394,6 @@ class SummedPulse(Pulse):
         #
         return self
 
-
     def __contains__(self, item):
         """Check if item is contained in self.
             If item is a SummedPulse object return True
@@ -469,7 +485,6 @@ class OnPulseRegionError(Exception):
     """
     def __init__(self, message):
         self.message = message
-
 
     def __str__(self):
         return "On-pulse region is ill-defined. %s" % self.message
