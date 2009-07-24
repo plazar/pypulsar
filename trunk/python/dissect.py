@@ -546,7 +546,7 @@ if __name__ == '__main__':
     toa_group = optparse.OptionGroup(parser, "TOA Generation", "The following options are used to determine if/how TOAs are generated.")
     toa_group.add_option('--toas', dest='write_toas', action='store_true', help="Write TOAs to stdout. A TOA for each pulse will be written out unless --toa-threshold is provided, in which case consecutive pulses will be summed until sum profile's SNR surpases threshold.", default=False)
     toa_group.add_option('--template', dest='template', type='string', help="Required option if generating TOAs. This is the template profile to use.", default=None)
-    toa_group.add_option('--toa-threshold', dest="toa_threshold", type='float', action='store', help="Threshold SNR for writing out TOAs. (Default: Use value from --threshold).", default=None)
+    toa_group.add_option('--toa-threshold', dest="toa_threshold", type='float', action='store', help="Threshold SNR for writing out TOAs. (Default: 0).", default=0)
     toa_group.add_option('--min-pulses', dest="min_pulses", type='int', action='store', help="Minimum number of pulses that must be added for writing out a single TOA. (Default: 1).", default=1)
     toa_group.add_option('--write-toa-files', dest='write_toa_files', action='store_true', help="Write out profiles used for TOAs as text files and postscript plots. (Default: Don't write out TOA profiles).", default=False)
     parser.add_option_group(toa_group)
@@ -567,9 +567,6 @@ if __name__ == '__main__':
 
 
     options, args = parser.parse_args()
-
-    if options.toa_threshold is None:
-        options.toa_threshold = options.threshold
 
     # Count number of period determination options are provided
     if (options.parfile is not None) + \
