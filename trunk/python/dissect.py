@@ -168,11 +168,16 @@ def main():
         template = np.loadtxt(options.template, usecols=(1,))
         # Get TOAs and write them to stdout
         current_pulse = None
+        numpulses = 0
         for pulse in good_pulses:
             if current_pulse is None:
                 current_pulse = pulse.to_summed_pulse()
+                numpulses = 1
             else:
                 current_pulse += pulse
+                numpulses += 1
+            if numpulses < options.min_pulses:
+                continue
             if get_snr(current_pulse) > options.toa_threshold:
                 # Interpolate and downsample current_pulse so
                 # it is same size as template profile
@@ -186,7 +191,10 @@ def main():
                     current_pulse.plot("TOA%d" % numtoas)
                     current_pulse.write_to_file("TOA%d" % numtoas)
                 current_pulse = None
+                numpulses = 0
         print "Number of TOAs: %d" % numtoas
+        print "Number of pulses thrown out because 'min pulses' requirement " \
+                "or SNR threshold not met: %d" % numpulses
 
 
 def write_toa(summed_pulse, polycos, template_profile, \
@@ -215,10 +223,8 @@ def write_toa(summed_pulse, polycos, template_profile, \
 
     t0f = mjdf - phs*period/psr_utils.SECPERDAY + dmdelay_mjd
     t0i = mjdi
-    ##print "len(summed), len(template): ", len(summed_pulse.profile), len(template_profile)
     shift,eshift,snr,esnr,b,errb,ngood = measure_phase(summed_pulse.profile, \
                             template_profile)
-    ##print "measured phase"
     # tau and tau_err are the predicted phase of the pulse arrival
     tau, tau_err = shift/summed_pulse.N, eshift/summed_pulse.N
     # Note: "error" flags are shift = 0.0 and eshift = 999.0
@@ -541,6 +547,7 @@ if __name__ == '__main__':
     toa_group.add_option('--toas', dest='write_toas', action='store_true', help="Write TOAs to stdout. A TOA for each pulse will be written out unless --toa-threshold is provided, in which case consecutive pulses will be summed until sum profile's SNR surpases threshold.", default=False)
     toa_group.add_option('--template', dest='template', type='string', help="Required option if generating TOAs. This is the template profile to use.", default=None)
     toa_group.add_option('--toa-threshold', dest="toa_threshold", type='float', action='store', help="Threshold SNR for writing out TOAs. (Default: Use value from --threshold).", default=None)
+    toa_group.add_option('--min-pulses', dest="min_pulses", type='int', action='store', help="Minimum number of pulses that must be added for writing out a single TOA. (Default: 1).", default=1)
     toa_group.add_option('--write-toa-files', dest='write_toa_files', action='store_true', help="Write out profiles used for TOAs as text files and postscript plots. (Default: Don't write out TOA profiles).", default=False)
     parser.add_option_group(toa_group)
 
