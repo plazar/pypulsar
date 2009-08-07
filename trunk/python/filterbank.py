@@ -7,6 +7,8 @@
 #
 #           Patrick Lazarus, June 6th, 2009
 
+import sys
+import warnings
 import os.path
 import numpy as np
 import sigproc
@@ -57,8 +59,7 @@ class filterbank:
             self.data_size = os.stat(self.filename)[6] - self.header_size
             bytes_per_sample = self.header['nchans'] * (self.header['nbits']/8)
             if self.data_size % bytes_per_sample:
-                print "Not an integer number of samples in file! Exiting..."
-                sys.exit(1)
+                warnings.warn("Not an integer number of samples in file.")
             self.number_of_samples = self.data_size / bytes_per_sample
 
     def read_sample(self):
