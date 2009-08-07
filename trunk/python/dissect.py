@@ -162,6 +162,7 @@ def main():
         numtoas = 0
         print "Generating TOAs. Please wait..."
         print "TOA threshold:", options.toa_threshold
+        print "Min number of pulses for a TOA:", options.min_pulses
         print "Profile template used:", options.template
         # Extract second column from template file
         # First column is index
@@ -188,13 +189,41 @@ def main():
                 if options.write_toa_files:
                     # TOA profiles are already downfactored
                     # do not downfactor more when creating plot
-                    current_pulse.plot("TOA%d" % numtoas)
+                    plot_toa(numtoas, current_pulse, template)
                     current_pulse.write_to_file("TOA%d" % numtoas)
                 current_pulse = None
                 numpulses = 0
         print "Number of TOAs: %d" % numtoas
         print "Number of pulses thrown out because 'min pulses' requirement " \
                 "or SNR threshold not met: %d" % numpulses
+
+
+def plot_toa(numtoa, pulse, template=None, basefn=""):
+    """Plot the profile used for a TOA.
+        - 'numtoa' is the TOA's number within an observation.
+        - 'pulse' is the SummedPulse object used to generate 
+                the TOA.
+        - 'template' is the template used for generating the
+                TOA. If it is provided it will be overlayed 
+                on the plot. 'template' should be a np.array.
+        - 'basefn' is the base of the output filename to use.
+    """
+    if basefn:
+        outfn = "%s.TOA%d.ps" % (basefn, numtoa)
+    else:
+        outfn = "TOA%d.ps" % numtoa
+    
+    # scale pulse
+    copy_of_pulse = pulse.make_copy()
+    copy_of_pulse.scale()
+    plt.figure()
+    plt.plot(copy_of_pulse.profile, 'k-', lw=0.5)
+    if template is not None:
+        plt.plot(template, 'k:', lw=0.5)
+    plt.xlabel("Profile bin")
+    plt.ylabel("SNR")
+    plt.title("TOA #%d" % numtoa)
+    plt.savefig(outfn, orientation='landscape')
 
 
 def write_toa(summed_pulse, polycos, template_profile, \
