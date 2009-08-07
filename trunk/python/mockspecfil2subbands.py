@@ -17,7 +17,7 @@ import filterbank
 import coordconv
 
 # Constants
-SAMPLES_PER_READ = 512 # Number of samples to read at once
+SAMPLES_PER_READ = 1024*4 # Number of samples to read at once
 
 parser = optparse.OptionParser(usage='%prog [options] infile', description="Convert filterbank data (from MockSpec data) to PRESTO subbands. Each subband is one channel.")
 parser.add_option('-o', '--outname', dest='outname', type='string', help="Output filename. Do not include extension.", default=None)
