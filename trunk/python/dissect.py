@@ -37,7 +37,14 @@ DEFAULT_WIDTHS = [1,2,4,8,16,32] # Powers of 2
 # DEFAULT_WIDTHS = [1,2,3,4,6,9,14,20,30] # Default from single_pulse_search.py
                     # default boxcar widths to use for smoothing
                     # when searching for pulses.
-   
+
+
+def debug_msg(msg):
+    """Return debug message formatted so it will display 
+        in yellow, when printed.
+    """
+    return "\033[0;33m" + msg + "\033[0;30m"
+
 
 def main():
     # Open file
@@ -63,7 +70,8 @@ def main():
         mjdi = int(mjd) # integer part of mjd
         mjdf = mjd-mjdi # fractional part of mjd
         phase, freq = polycos.get_phs_and_freq(mjdi, mjdf)
-        print "DEBUG: phase at start of file: %f" % phase
+        if options.debug:
+            print debug_msg("Phase at start of file: %f" % phase)
         if options.shift_phase != 0.0:
             prof_start_phase = options.shift_phase
             shift_phase = options.shift_phase - phase
@@ -82,7 +90,8 @@ def main():
         mjdi = int(mjd) # integer part of mjd
         mjdf = mjd-mjdi # fractional part of mjd
         phase, freq = polycos.get_phs_and_freq(mjdi, mjdf)
-        print "DEBUG: phase at start of file: %f" % phase
+        if options.debug:
+            print debug_msg("Phase at start of file: %f" % phase)
         if options.shift_phase != 0.0:
             prof_start_phase = options.shift_phase
             shift_phase = options.shift_phase - phase
@@ -124,8 +133,10 @@ def main():
             pulse = current_pulse.make_copy()
             pulse.smooth(numbins)
             snr = get_snr(pulse)
+            if np.isnan(snr):
+                snr = 0
             if snr > options.threshold:
-                if snr > maxsnr:
+                if snr >= maxsnr:
                     if maxsnr==0 and bestfactor==0:
                         # First time snr is above threshold
                         snrs.append(snr)
@@ -138,7 +149,6 @@ def main():
                         notes[-1] = "smoothed by %3d bins" % numbins
                     maxsnr = snr
                     bestfactor = numbins
-            
 
     print_report(good_pulses, numpulses, nummasked, snrs=snrs, notes=notes)
     if options.create_output_files and len(good_pulses) > 0:
@@ -183,8 +193,10 @@ def main():
                 # Interpolate and downsample current_pulse so
                 # it is same size as template profile
                 current_pulse.interp_and_downsamp(template.size)
+                # current_pulse.downsample_Nbins(template.size) ## ADDED FOR DEBUGGING
+                current_pulse.scale()
                 write_toa(current_pulse, polycos, template, timeseries, \
-                            prof_start_phase)
+                            prof_start_phase, options.debug)
                 numtoas += 1
                 if options.write_toa_files:
                     # TOA profiles are already downfactored
@@ -227,11 +239,13 @@ def plot_toa(numtoa, pulse, template=None, basefn=""):
 
 
 def write_toa(summed_pulse, polycos, template_profile, \
-                        timeseries, start_phase=0.0):
+                        timeseries, start_phase=0.0, debug=False):
     """Given a SummedPulse generate a TOA and write it to stdout. 
         A polycos file is required. 'template_profile' is simply 
         a numpy array. 'timeseries' is a Datfile object.
         'start_phase' is the phase at the start of the profile.
+        'debug' is a boolean value that determines if debugging
+        info should be displayed.
     """
     if template_profile is None:
         raise ValueError("A template profile MUST be provided.")
@@ -243,12 +257,20 @@ def write_toa(summed_pulse, polycos, template_profile, \
     period = 1.0/freq
     
     # Caclulate offset due to shifting channels to account for DM
-    hifreq = timeseries.infdata.lofreq - timeseries.infdata.chan_width/2.0 + \
-                timeseries.infdata.BW
-    midfreq = timeseries.infdata.lofreq + timeseries.infdata.BW/2.0
+    # Hifreq doesn't have a half-channel offset 
+    # (why? because get_TOAs.py doesn't. Why...)
+    # Why subtract 1 channel to get hifreq?
+    hifreq = timeseries.infdata.lofreq + timeseries.infdata.BW - \
+                timeseries.infdata.chan_width
+    midfreq = timeseries.infdata.lofreq - 0.5*timeseries.infdata.chan_width + \
+                0.5*timeseries.infdata.BW
     dmdelay = psr_utils.delay_from_DM(timeseries.infdata.DM, midfreq) - \
               psr_utils.delay_from_DM(timeseries.infdata.DM, hifreq)
     dmdelay_mjd = dmdelay/float(psr_utils.SECPERDAY)
+    if debug:
+        print debug_msg("High frequency (MHz): %f" % hifreq)
+        print debug_msg("Mid frequency (MHz): %f" % midfreq)
+        print debug_msg("DM delay added to TOAs (MJD): %f" % dmdelay_mjd)
 
     t0f = mjdf - phs*period/psr_utils.SECPERDAY + dmdelay_mjd
     t0i = mjdi
@@ -262,11 +284,9 @@ def write_toa(summed_pulse, polycos, template_profile, \
     # Send the TOA to STDOUT
     toaf = t0f + tau*period/float(psr_utils.SECPERDAY)
     newdays = int(np.floor(toaf))
-    centre_freq = timeseries.infdata.lofreq + timeseries.infdata.chan_width * \
-                        timeseries.infdata.numchan/2.0
     obs_code = telescopes.telescope_to_id[timeseries.infdata.telescope]
     psr_utils.write_princeton_toa(t0i+newdays, toaf-newdays, \
-                                tau_err*period*1e6, centre_freq, \
+                                tau_err*period*1e6, midfreq, \
                                 timeseries.infdata.DM, obs=obs_code)
 
 
@@ -567,6 +587,7 @@ if __name__ == '__main__':
     parser = optparse.OptionParser(usage="%prog --use-parfile PARFILE | --use-polycos POLYCOFILE | -p --period PERIOD [options] infile.dat", description="Given a input timeseries (a PRESTO .dat file) dissect it into individual pulses and record the pulses that surpass the signification threshold. Written by Patrick Lazarus.", version="%prog v0.9 (by Patrick Lazarus)", prog="dissect.py")
     parser.add_option('-t', '--threshold', dest='threshold', type='float', action='store', help="Only record pulses more significant than this threshold. (Default: 5).", default=5)
     parser.add_option('-n', '--no-output-files', dest='create_output_files', action='store_false', help="Do not create any output file for each significant pulse detected. (Default: create output files).", default=True)
+    parser.add_option('--debug', dest='debug', action='store_true', help="Display debugging information. (Default: don't display debugging information).", default=False)
     parser.add_option('--no-text-files', dest='create_text_files', action='store_false', help="Do not create text file for each significant pulse detected. (Default: create text files).", default=True)
     parser.add_option('-r', '--on-pulse-regions', dest='on_pulse_regions', type='string', action='callback', callback=parse_on_pulse_regions, help="Define (multiple) on-pulse regions. Beginning and end of each region should be separated by ':' and multiple pairs should be separated by ','. No spaces! Values should be given in terms of rotational phase, floats between 0.0 and 1.0. The on-pulse region is applied after the start of the observation has been shifted. (Default: None).", default=None)
     parser.add_option('-w', '--widths', dest='widths', type='string', action='callback', callback=parse_boxcar_widths, help="Boxcar widths (in number of samples) to use for smoothing profiles when searching for pulses. widths should be comma-separated _without_ spaces. (Default: Smooth with boxcar widths %s)" % DEFAULT_WIDTHS, default=DEFAULT_WIDTHS)
