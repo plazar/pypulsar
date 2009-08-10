@@ -25,6 +25,8 @@ class Datfile:
             self.datfile = open(datfn, 'r')
             self.inffn = "%s.inf" % self.basefn
             self.infdata = infodata.infodata(self.inffn)
+            # Corrections need to be applied to data from .inf file
+            correct_infdata(self.infdata)
         else:
            raise "Filename (%s) doesn't end with '.dat'"
         # initialize file, and current sample, time, and MJD counters
@@ -149,3 +151,40 @@ class Datfile:
             current_mjd = self.currmjd_actual
             current_period = period_at_mjd(current_mjd)
             current_pulse = self.read_Tseconds(current_period)
+
+def correct_infdata(inf):
+    """Only argument is an infodata object. The infodata object
+        is corrected in place (nothing is returned).
+        
+        The following is an emperical correction for SPIGOT
+        data. The comment and code are taken from Scott Ransom's
+        PRESTO's prepfold.py
+        
+        The following "fixes" (we think) the observing frequency of the Spigot
+        based on tests done by Ingrid on 0737 (comparing it to GASP)
+        The same sorts of corrections should be made to WAPP data as well...
+        The tepoch corrections are empirically determined timing corrections
+        Note that epoch is only double precision and so the floating
+        point accuracy is ~1 us!
+    """
+    if inf.telescope=='GBT':
+        if np.fabs(np.fmod(inf.dt, 8.192e-05) < 1e-12) and \
+           ("spigot" in inf.instrument.lower() or \
+            "guppi" not in inf.instrument.lower()):
+            if inf.chan_width==800.0/1024: # Spigot 800 MHz mode 2
+                inf.lofreq -= 0.5 * inf.chan_width
+                # original values
+                #if inf.epoch > 0.0: inf.epoch += 0.039334/86400.0
+                # values measured with 1713+0747 wrt BCPM2 on 13 Sept 2007
+                if inf.epoch > 0.0: inf.epoch += 0.039365/86400.0
+            elif inf.chan_width==800.0/2048:
+                inf.lofreq -= 0.5 * inf.chan_width
+                if inf.epoch < 53700.0:  # Spigot 800 MHz mode 16 (downsampled)
+                    if inf.epoch > 0.0: inf.tepoch += 0.039352/86400.0
+                else:  # Spigot 800 MHz mode 14
+                    # values measured with 1713+0747 wrt BCPM2 on 13 Sept 2007
+                    if inf.epoch > 0.0: inf.epoch += 0.039365/86400.0
+            elif inf.chan_width==50.0/1024 or inf.chan_width==50.0/2048: # Spigot 50 MHz modes
+                inf.lofreq += 0.5 * inf.chan_width
+                # Note: the offset has _not_ been measured for the 2048-lag mode
+                if inf.epoch > 0.0: inf.epoch += 0.039450/86400.0
