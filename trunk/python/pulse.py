@@ -164,6 +164,24 @@ class Pulse:
             self.profile = self.profile.sum(axis=1)
             self.dt *= downfactor 
 
+    def downsample_Nbins(self, N):
+        """Downsample profile so final profile has N bins. 
+
+            NOTE: The profile attribute of 'self' will be modified.
+        """
+        if N > self.N:
+            raise "Cannot downsample so new profile (%d) is longer than old profile (%d)! ... need proper exception." % (N, self.N)
+        downfactor = int(self.N/N)
+        numleftover = self.N % N
+        leftover = self.profile[self.N - numleftover:] # should be less than downfactor long
+        self.profile = self.profile[:self.N - numleftover]
+        self.profile.shape = (N, downfactor)
+        self.profile = self.profile.mean(axis=1)
+        # DONT Add leftovers to last bin
+        # self.profile[-1] += leftover.sum()
+        self.N = N # New length of profile
+        self.dt *= downfactor
+            
     def smooth(self, smoothfactor=1):
         """Smooth profile by convolving with tophat of width
             'smoothfactor'. The height of the tophat is chosen
@@ -218,6 +236,13 @@ class Pulse:
         """
         downsamp = int(self.N/numsamples)+1
         interp = downsamp*numsamples
+        
+        # The following settings takes much longer, but is possibly
+        # more accurate (when overplotted with above method the two
+        # profiles look identical, by eye).
+        # downsamp = self.N
+        # interp = numsamples * self.N
+        
         self.interpolate(interp)
         self.downsample(downsamp)
 
@@ -298,7 +323,7 @@ class Pulse:
         summed_pulse = SummedPulse(self.number, self.mjd, self.time, \
                                 self.duration, self.profile, self.origfn, \
                                 self.dt, self.on_pulse)
-        summed_pulse.scale()
+        # summed_pulse.scale() ## DEBUG
         return summed_pulse
         
     def __add__(self, other):
@@ -309,7 +334,7 @@ class Pulse:
             summed_pulse = other.make_copy()
         else:
             copy_of_other = other.make_copy()
-            copy_of_other.scale()
+            # copy_of_other.scale() ## DEBUG
             summed_pulse = copy_of_other.to_summed_pulse()
         summed_pulse += self
         return summed_pulse
@@ -368,7 +393,7 @@ class SummedPulse(Pulse):
         # Prepare profiles for summing
         # self.scale()
         copy_of_other = other.make_copy()
-        copy_of_other.scale()
+        # copy_of_other.scale() ## DEBUG
         
         # Truncate to size of smaller profile
         self.N = np.min([self.N, copy_of_other.N])
