@@ -191,6 +191,7 @@ def plot_data(tempo_results, xkey, ykey, postfit=True, prefit=False, \
         raise ValueError("At least one of prefit and postfit must be True.")
     subplot = 1
     numsubplots = len(to_plot_postfit)
+    global axes
     axes = []
     handles = []
     labels = []
@@ -354,6 +355,43 @@ def keypress(event):
             # Go forward to next plot view
             print "Going forward..."
             event.canvas.toolbar.forward()
+        elif event.key.lower() == 'x':
+            # Set x-axis limits
+            print "Setting x-axis limits. User input required..."
+            xmin = raw_input("X-axis minimum: ")
+            xmax = raw_input("X-axis maximum: ")
+            try:
+                xmin = float(xmin)
+                xmax = float(xmax)
+                if xmax <= xmin:
+                    raise ValueError
+            except ValueError:
+                print "Bad values provided!"
+                return
+            plt.xlim(xmin, xmax)
+        elif event.key.lower() == 'y':
+            global axes
+            # Set y-axis limits
+            print "Setting y-axis limits. User input required..."
+            if len(axes) == 2:
+                axes_to_adjust = raw_input("Axes to adjust (pre/post): ")
+                if axes_to_adjust.lower().startswith('pre'):
+                    plt.axes(axes[0])
+                elif axes_to_adjust.lower().startswith('post'):
+                    plt.axes(axes[1])
+                else:
+                    raise ValueError
+            ymin = raw_input("Y-axis minimum: ")
+            ymax = raw_input("Y-axis maximum: ")
+            try:
+                ymin = float(ymin)
+                ymax = float(ymax)
+                if ymax <= ymin:
+                    raise ValueError
+            except ValueError:
+                print "Bad values provided!"
+                return
+            plt.ylim(ymin, ymax)
         elif event.key == ' ':
             # Reload residuals and replot
             print "Reloading..."
