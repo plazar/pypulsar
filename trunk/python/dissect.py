@@ -113,6 +113,9 @@ def main():
 
     print "On-pulse regions will be set to: %s" % \
             ','.join(['%s:%s' % t for t in options.on_pulse_regions])
+    print "Boxcar widths to be used: %s" % \
+            ', '.join(['%s' % w for w in options.widths])
+    print "Single-pulse SNR threshold: %s" % options.threshold
 
     # Loop over pulses in timeseries. Examine pulses one at a time.
     good_pulses = []
