@@ -44,6 +44,11 @@ class TempoResults:
                 break
         tempolisfile.close()
 
+        # Record filename
+        self.inparfn = inparfn
+        self.outparfn = outparfn
+        self.intimfn = intimfn
+        
         # Read parfiles
         self.inpar = par.psr_par(inparfn)
         self.outpar = par.psr_par(outparfn)
@@ -251,6 +256,13 @@ def plot_data(tempo_results, xkey, ykey, postfit=True, prefit=False, \
     if numsubplots > 1:
         # Increase spacing between subplots.
         plt.subplots_adjust(hspace=0.25)
+   
+    # Write name of input files used for timing on figure
+    if interactive:
+        fntext = "TOA file: %s, Parameter file: %s" % \
+                    (tempo_results.intimfn, tempo_results.inparfn)
+        figure_text = plt.figtext(0.01, 0.01, fntext, verticalalignment='bottom', \
+                            horizontalalignment='left')
     
     if show_legend:
         leg = plt.figlegend(handles, labels, 'upper right')
