@@ -275,7 +275,7 @@ def create_plot(tempo_results, xkey, ykey, postfit=True, prefit=False, \
     fig = plt.figure(figsize=(11,8.5))
    
     plot_data(tempo_results, xkey, ykey, postfit, prefit, \
-            mark_peri, show_legend)
+            interactive, mark_peri, show_legend)
     
     # Register event callbacks function and show the plot
     cid_keypress = fig.canvas.mpl_connect('key_press_event', keypress)
