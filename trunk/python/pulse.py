@@ -299,7 +299,7 @@ class Pulse:
         #
         if basefn is None:
             basefn, extension = os.path.splitext(self.origfn)
-        file = open("%s.prof%d" % (basefn, self.number), 'w')
+        file = open("%s.prof%d" % (os.path.split(basefn)[1], self.number), 'w')
         file.write("# Original data file              = %s\n" % self.origfn)
         file.write("# Pulse Number                    = %d\n" % self.number)
         file.write("# MJD of start of pulse           = %0.15f\n" % self.mjd)
