@@ -15,6 +15,7 @@ Patrick Lazarus, June 16, 2009
 """
 
 import sys
+import os.path
 import optparse
 import warnings
 import numpy as np
@@ -198,13 +199,15 @@ def main():
                 current_pulse.interp_and_downsamp(template.size)
                 # current_pulse.downsample_Nbins(template.size) ## ADDED FOR DEBUGGING
                 current_pulse.scale()
-                write_toa(current_pulse, polycos, template, timeseries, \
-                            prof_start_phase, options.debug)
+                pulseshift, templateshift = write_toa(current_pulse, \
+                            polycos, template, timeseries, prof_start_phase, \
+                            options.debug)
                 numtoas += 1
                 if options.write_toa_files:
                     # TOA profiles are already downfactored
                     # do not downfactor more when creating plot
-                    plot_toa(numtoas, current_pulse, template)
+                    plot_toa(numtoas, current_pulse, template, \
+                            pulseshift, templateshift)
                     current_pulse.write_to_file("TOA%d" % numtoas)
                 current_pulse = None
                 numpulses = 0
@@ -213,7 +216,8 @@ def main():
                 "or SNR threshold not met: %d" % numpulses
 
 
-def plot_toa(numtoa, pulse, template=None, basefn=""):
+def plot_toa(numtoa, pulse, template=None, pulseshift=0, \
+                templateshift=0, basefn=""):
     """Plot the profile used for a TOA.
         - 'numtoa' is the TOA's number within an observation.
         - 'pulse' is the SummedPulse object used to generate 
@@ -221,6 +225,8 @@ def plot_toa(numtoa, pulse, template=None, basefn=""):
         - 'template' is the template used for generating the
                 TOA. If it is provided it will be overlayed 
                 on the plot. 'template' should be a np.array.
+        - 'pulseshift' is an amount of phase to shift pulse by.
+        - 'templateshift' is an amount of phase template is shifted by.
         - 'basefn' is the base of the output filename to use.
     """
     if basefn:
@@ -231,11 +237,16 @@ def plot_toa(numtoa, pulse, template=None, basefn=""):
     # scale pulse
     copy_of_pulse = pulse.make_copy()
     copy_of_pulse.scale()
+    phases = np.linspace(0, 1.0, copy_of_pulse.N)
+    tshifted_phases = (phases-templateshift+pulseshift) % (1.0+1e-7)
+    tsorted_phase_indices = np.argsort(tshifted_phases)
+    # Re-order template
+    shifted_template = template[tsorted_phase_indices]
     plt.figure()
-    plt.plot(copy_of_pulse.profile, 'k-', lw=0.5)
+    plt.plot(phases, copy_of_pulse.profile, 'k-', lw=0.5)
     if template is not None:
-        plt.plot(template, 'k:', lw=0.5)
-    plt.xlabel("Profile bin")
+        plt.plot(phases, shifted_template, 'k:', lw=0.5)
+    plt.xlabel("Phase (%d profile bins)" % copy_of_pulse.N)
     plt.ylabel("SNR")
     plt.title("TOA #%d" % numtoa)
     plt.savefig(outfn, orientation='landscape')
@@ -249,6 +260,7 @@ def write_toa(summed_pulse, polycos, template_profile, \
         'start_phase' is the phase at the start of the profile.
         'debug' is a boolean value that determines if debugging
         info should be displayed.
+        Returns shift required to line up template and pulse.
     """
     if template_profile is None:
         raise ValueError("A template profile MUST be provided.")
@@ -273,14 +285,22 @@ def write_toa(summed_pulse, polycos, template_profile, \
     if debug:
         print debug_msg("High frequency (MHz): %f" % hifreq)
         print debug_msg("Mid frequency (MHz): %f" % midfreq)
-        print debug_msg("DM delay added to TOAs (MJD): %f" % dmdelay_mjd)
+        print debug_msg("DM delay added to TOAs (s): %g" % dmdelay)
+        print debug_msg("DM delay added to TOAs (MJD): %g" % dmdelay_mjd)
 
     t0f = mjdf - phs*period/psr_utils.SECPERDAY + dmdelay_mjd
     t0i = mjdi
-    shift,eshift,snr,esnr,b,errb,ngood = measure_phase(summed_pulse.profile, \
+    shift,eshift,snr,esnr,b,errb,ngood,tphs = measure_phase(summed_pulse.profile, \
                             template_profile)
+    # tphs is amount template is rotated by. It is originally 
+    # measured in radians, convert to rotational phase
+    tphs = tphs/(np.pi*2.0) % 1.0
     # tau and tau_err are the predicted phase of the pulse arrival
     tau, tau_err = shift/summed_pulse.N, eshift/summed_pulse.N
+    if debug:
+        print debug_msg("Shift (FFTFIT): %f, Tau: %f" % (shift, tau))
+        print debug_msg("Shift error (FFTFIT): %f, Tau error: %f" % \
+                            (eshift, tau_err))
     # Note: "error" flags are shift = 0.0 and eshift = 999.0
     if (np.fabs(shift) < 1e-7 and np.fabs(eshift-999.0) < 1e-7):
         raise FFTFitError("Error in FFTFIT. Bad return values.")
@@ -291,6 +311,7 @@ def write_toa(summed_pulse, polycos, template_profile, \
     psr_utils.write_princeton_toa(t0i+newdays, toaf-newdays, \
                                 tau_err*period*1e6, midfreq, \
                                 timeseries.infdata.DM, obs=obs_code)
+    return tau, tphs
 
 
 def measure_phase(profile, template):
@@ -298,13 +319,18 @@ def measure_phase(profile, template):
         following parameters: shift,eshift,snr,esnr,b,errb,ngood
         (returned as a tuple).  These are defined as in Taylor's
         talk at the Royal Society.
+
+        pha1, the amount the template is rotated by (in radians)
+        is also returned, in addition to the values mentioned
+        above. pha1 is the last element in the tuple.
     """
     # This code is taken from Scott Ransom's PRESTO's get_TOAs.py
     c,amp,pha = fftfit.cprof(template)
     pha1 = pha[0]
+    # Rotate the template
     pha = np.fmod(pha-np.arange(1,len(pha)+1)*pha1, 2.0*np.pi)
     shift,eshift,snr,esnr,b,errb,ngood = fftfit.fftfit(profile,amp,pha)
-    return shift,eshift,snr,esnr,b,errb,ngood
+    return shift,eshift,snr,esnr,b,errb,ngood,pha1
 
 
 def get_snr(pulse, uncertainty=1):
@@ -357,7 +383,7 @@ def plot_pulses(pulses, timeseries, downfactor=1):
         Downsample profiles by factor 'downfactor' before plotting.
     """
     for pulse in pulses:
-        pulse.plot(timeseries.basefn, downfactor)
+        pulse.plot(os.path.split(timeseries.basefn)[1], downfactor)
 
 
 def joy_division_plot(pulses, timeseries, downfactor=1, hgt_mult=1):
@@ -368,7 +394,8 @@ def joy_division_plot(pulses, timeseries, downfactor=1, hgt_mult=1):
         hgt_mult is a factor to stretch the height of the paper.
     """
     first = True
-    ppgplot.pgbeg("%s.joydiv.ps/CPS" % timeseries.basefn, 1, 1)
+    ppgplot.pgbeg("%s.joydiv.ps/CPS" % \
+                    os.path.split(timeseries.basefn)[1], 1, 1)
     ppgplot.pgpap(10.25, hgt_mult*8.5/11.0) # Letter landscape
     # ppgplot.pgpap(7.5, 11.7/8.3) # A4 portrait, doesn't print properly
     ppgplot.pgiden()
