@@ -165,9 +165,9 @@ def main():
 if __name__ == '__main__':
     parser = optparse.OptionParser()
     parser.add_option('-s', '--set', dest='toset', type='string', action='callback', callback=parse_attributes, help="Set text attributes. Possible attributes to set are: defaut, bold, dim, underline, blink, reverse and hidden.")
-    parser.add_option('--fg', dest='fg', action='store', help='Forground text colour.', default='default')
-    parser.add_option('--bg', dest='bg', action='store', help='Background text colour.', default='default')
-    parser.add_option('--preset', dest='preset', action='store', help='Use a preset colour scheme. Other options will be ignored.', default=None)
+    parser.add_option('-f', '--fg', dest='fg', action='store', help='Forground text colour.', default='default')
+    parser.add_option('-b', '--bg', dest='bg', action='store', help='Background text colour.', default='default')
+    parser.add_option('-p', '--preset', dest='preset', action='store', help='Use a preset colour scheme. Other options will be ignored.', default=None)
     options, args = parser.parse_args()
     # Ensure that options.attributes exists even if not attributes are set
     if not hasattr(parser.values, 'attributes'):
