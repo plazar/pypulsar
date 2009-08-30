@@ -1,11 +1,16 @@
+#!/usr/bin/env python
 """
 Colour (colour.py)
 
 A module for colourizing text output to the terminal.
+
+Patrick Lazarus, August 28th, 2009
 """
 
+import optparse
+
 # Default colour (reset to this colour)
-DEFAULT_CODE = "\033[0;30;47m"
+DEFAULT_CODE = "\033[0;39;49m"
 
 # Dictionary for translating keywords to colour codes
 preset_codes = {"default": DEFAULT_CODE, \
@@ -29,7 +34,8 @@ fg_colours = {"black": 30, \
               "blue": 34, \
               "purple": 35, \
               "cyan": 36, \
-              "white": 37}
+              "white": 37, \
+              "default": 39}
 
 bg_colours = {"black": 40, \
               "red": 41, \
@@ -38,13 +44,14 @@ bg_colours = {"black": 40, \
               "blue": 44, \
               "purple": 45, \
               "cyan": 46, \
-              "white": 47}
+              "white": 47, \
+              "default": 49}
 
 # Current colour
 current_code = DEFAULT_CODE
 
 
-def cset(preset=None, fg='black', bg='white', **attr):
+def cset(preset=None, fg='default', bg='default', **attr):
     """Set current colour code.
         If a preset colour code is provided other arguments will
         be ignored.
@@ -101,8 +108,6 @@ def cstring(s, *override, **kwoverride):
     # Assume there are overrides
     # Eventually we can check...
     temp_code = current_code
-    print override
-    print kwoverride
     cset(*override, **kwoverride)
     
     coloured_s = current_code + s + DEFAULT_CODE
@@ -139,3 +144,34 @@ def show_status():
     print "current_code:", repr(current_code)
     # Should we print a list of all keywords that
     # match the current code?
+
+
+def parse_attributes(option, opt_str, value, parser):
+    """Parse text attributes from command line.
+    """
+    if not hasattr(parser.values, 'attributes'):
+        # Create empty dictionary for text attributes
+        setattr(parser.values, 'attributes', {})
+    parser.values.attributes[value] = True
+
+
+def main():
+    # String to print is left over command line arguments
+    s = " ".join(args)
+    cprint(s, preset=options.preset, fg=options.fg, bg=options.bg, \
+                **options.attributes)
+
+
+if __name__ == '__main__':
+    parser = optparse.OptionParser()
+    parser.add_option('-s', '--set', dest='toset', type='string', action='callback', callback=parse_attributes, help="Set text attributes. Possible attributes to set are: defaut, bold, dim, underline, blink, reverse and hidden.")
+    parser.add_option('--fg', dest='fg', action='store', help='Forground text colour.', default='default')
+    parser.add_option('--bg', dest='bg', action='store', help='Background text colour.', default='default')
+    parser.add_option('--preset', dest='preset', action='store', help='Use a preset colour scheme. Other options will be ignored.', default=None)
+    options, args = parser.parse_args()
+    # Ensure that options.attributes exists even if not attributes are set
+    if not hasattr(parser.values, 'attributes'):
+        # Create empty dictionary for text attributes
+        setattr(parser.values, 'attributes', {})
+
+    main()
