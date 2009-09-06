@@ -355,7 +355,7 @@ def keypress(event):
             # Turn on zoom mode
             print "Toggling zoom mode..."
             event.canvas.toolbar.zoom()
-        elif event.key.lower() == 'h':
+        elif event.key.lower() == 'o':
             # Restore plot to original view
             print "Restoring plot..."
             event.canvas.toolbar.home()
@@ -412,6 +412,24 @@ def keypress(event):
             plot_data(tempo_results, options.xaxis, options.yaxis, 
                     options.postfit, options.prefit, options.mark_peri, \
                     options.legend)
+        elif event.key == 'h':
+            # Display help
+            print "Helping..."
+            print "-"*80
+            print "Help - Hotkeys definitions:"
+            print "\th - Display this help"
+            print "\tq - Quit"
+            print "\ts - Save current plot(s) to PostScript file"
+            print "\tz - Toggle Zoom-mode on/off"
+            print "\to - Go to original view"
+            print "\t< - Go to previous view"
+            print "\t> - Go to next view"
+            print "\tx - Set x-axis limits (terminal input required)"
+            print "\ty - Sey y-axis limits (terminal input required)"
+            print "\t[Spacebar] - Reload plot"
+            print "\t[Left mouse] - Select TOA (display info in terminal)"
+            print "\t             - Select zoom region (if Zoom-mode is on)"
+            print "-"*80
             
 
 def mjd_to_year(mjds):
