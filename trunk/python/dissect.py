@@ -24,6 +24,7 @@ import fftfit
 import datfile
 import mypolycos
 import telescopes
+import colour
 
 import ppgplot
 # Import matplotlib/pylab and set for non-interactive plots
@@ -38,13 +39,6 @@ DEFAULT_WIDTHS = [1,2,4,8,16,32] # Powers of 2
 # DEFAULT_WIDTHS = [1,2,3,4,6,9,14,20,30] # Default from single_pulse_search.py
                     # default boxcar widths to use for smoothing
                     # when searching for pulses.
-
-
-def debug_msg(msg):
-    """Return debug message formatted so it will display 
-        in yellow, when printed.
-    """
-    return "\033[0;33m" + msg + "\033[0;30m"
 
 
 def main():
@@ -72,7 +66,8 @@ def main():
         mjdf = mjd-mjdi # fractional part of mjd
         phase, freq = polycos.get_phs_and_freq(mjdi, mjdf)
         if options.debug:
-            print debug_msg("Phase at start of file: %f" % phase)
+            colour.cprint("MJD at start of file: %r" % mjd, 'debug')
+            colour.cprint("Phase at start of file: %f" % phase, 'debug')
         if options.shift_phase != 0.0:
             prof_start_phase = options.shift_phase
             shift_phase = options.shift_phase - phase
@@ -92,7 +87,8 @@ def main():
         mjdf = mjd-mjdi # fractional part of mjd
         phase, freq = polycos.get_phs_and_freq(mjdi, mjdf)
         if options.debug:
-            print debug_msg("Phase at start of file: %f" % phase)
+            colour.cprint("MJD at start of file: %r" % mjd, 'debug')
+            colour.cprint("Phase at start of file: %f" % phase, 'debug')
         if options.shift_phase != 0.0:
             prof_start_phase = options.shift_phase
             shift_phase = options.shift_phase - phase
@@ -130,14 +126,14 @@ def main():
         maxsnr = 0
         bestfactor = 0
         current_pulse.set_onoff_pulse_regions(options.on_pulse_regions)
-        if current_pulse.is_masked(numchunks=5): 
+        if current_pulse.is_masked(numchunks=5) and not options.no_toss: 
             nummasked += 1
             continue
         for numbins in options.widths:
             pulse = current_pulse.make_copy()
             pulse.smooth(numbins)
             snr = get_snr(pulse)
-            if np.isnan(snr):
+            if np.isnan(snr) or snr < 0:
                 snr = 0
             if snr > options.threshold:
                 if snr >= maxsnr:
@@ -154,7 +150,8 @@ def main():
                     maxsnr = snr
                     bestfactor = numbins
 
-    print_report(good_pulses, numpulses, nummasked, snrs=snrs, notes=notes)
+    print_report(good_pulses, numpulses, nummasked, snrs=snrs, notes=notes, \
+                    quiet=options.quiet)
     if options.create_output_files and len(good_pulses) > 0:
         if options.create_text_files:
             print "Writing pulse text files..."
@@ -283,10 +280,10 @@ def write_toa(summed_pulse, polycos, template_profile, \
               psr_utils.delay_from_DM(timeseries.infdata.DM, hifreq)
     dmdelay_mjd = dmdelay/float(psr_utils.SECPERDAY)
     if debug:
-        print debug_msg("High frequency (MHz): %f" % hifreq)
-        print debug_msg("Mid frequency (MHz): %f" % midfreq)
-        print debug_msg("DM delay added to TOAs (s): %g" % dmdelay)
-        print debug_msg("DM delay added to TOAs (MJD): %g" % dmdelay_mjd)
+        colour.cprint("High frequency (MHz): %f" % hifreq, 'debug')
+        colour.cprint("Mid frequency (MHz): %f" % midfreq, 'debug')
+        colour.cprint("DM delay added to TOAs (s): %g" % dmdelay, 'debug')
+        colour.cprint("DM delay added to TOAs (MJD): %g" % dmdelay_mjd, 'debug')
 
     t0f = mjdf - phs*period/psr_utils.SECPERDAY + dmdelay_mjd
     t0i = mjdi
@@ -298,14 +295,18 @@ def write_toa(summed_pulse, polycos, template_profile, \
     # tau and tau_err are the predicted phase of the pulse arrival
     tau, tau_err = shift/summed_pulse.N, eshift/summed_pulse.N
     if debug:
-        print debug_msg("Shift (FFTFIT): %f, Tau: %f" % (shift, tau))
-        print debug_msg("Shift error (FFTFIT): %f, Tau error: %f" % \
-                            (eshift, tau_err))
+        colour.cprint("FFTFIT: Shift (bins): %f, Tau (phase): %f" % (shift, tau), 'debug')
+        colour.cprint("FFTFIT: Shift error (bins): %f, Tau error (phase): %f" % \
+                            (eshift, tau_err), 'debug')
     # Note: "error" flags are shift = 0.0 and eshift = 999.0
     if (np.fabs(shift) < 1e-7 and np.fabs(eshift-999.0) < 1e-7):
         raise FFTFitError("Error in FFTFIT. Bad return values.")
     # Send the TOA to STDOUT
     toaf = t0f + tau*period/float(psr_utils.SECPERDAY)
+    if debug:
+        colour.cprint("t0f (MJD): %r" % t0f, 'debug')
+        colour.cprint("period (s): %r" % period, 'debug')
+        colour.cprint("toaf (MJD): %r" % toaf, 'debug')
     newdays = int(np.floor(toaf))
     obs_code = telescopes.telescope_to_id[timeseries.infdata.telescope]
     psr_utils.write_princeton_toa(t0i+newdays, toaf-newdays, \
@@ -347,7 +348,8 @@ def get_snr(pulse, uncertainty=1):
     return snr
 
 
-def print_report(pulses, numpulses, nummasked, snrs=None, notes=None):
+def print_report(pulses, numpulses, nummasked, snrs=None, notes=None, \
+                    quiet=False):
     """Print a report given the pulses provided.
     """
     print "Autopsy report:"
@@ -356,7 +358,7 @@ def print_report(pulses, numpulses, nummasked, snrs=None, notes=None):
                 float(nummasked)/numpulses*100)
     print "\tNumber of good pulses found: %s (%5.2f%%)" % (len(pulses), \
                 float(len(pulses))/numpulses*100)
-    if len(pulses) > 0:
+    if len(pulses) > 0 and not quiet:
         use_snrs = ""
         use_notes = ""
         if snrs is not None and len(snrs) == len(pulses):
@@ -619,6 +621,8 @@ if __name__ == '__main__':
     parser.add_option('-n', '--no-output-files', dest='create_output_files', action='store_false', help="Do not create any output file for each significant pulse detected. (Default: create output files).", default=True)
     parser.add_option('--debug', dest='debug', action='store_true', help="Display debugging information. (Default: don't display debugging information).", default=False)
     parser.add_option('--no-text-files', dest='create_text_files', action='store_false', help="Do not create text file for each significant pulse detected. (Default: create text files).", default=True)
+    parser.add_option('-q', '--quiet', dest='quiet', action='store_true', help="Output less information. (Default: Output full information).", default=False)
+    parser.add_option('--no-toss', dest='no_toss', action='store_true', help="Do not toss out any pulses. (Default: Toss out partially masked profiles).", default=False)
     parser.add_option('-r', '--on-pulse-regions', dest='on_pulse_regions', type='string', action='callback', callback=parse_on_pulse_regions, help="Define (multiple) on-pulse regions. Beginning and end of each region should be separated by ':' and multiple pairs should be separated by ','. No spaces! Values should be given in terms of rotational phase, floats between 0.0 and 1.0. The on-pulse region is applied after the start of the observation has been shifted. (Default: None).", default=None)
     parser.add_option('-w', '--widths', dest='widths', type='string', action='callback', callback=parse_boxcar_widths, help="Boxcar widths (in number of samples) to use for smoothing profiles when searching for pulses. widths should be comma-separated _without_ spaces. (Default: Smooth with boxcar widths %s)" % DEFAULT_WIDTHS, default=DEFAULT_WIDTHS)
     parser.add_option('-s', '--shift-phase', dest='shift_phase', type='float', help="Set provided phase as the beginning of each pulse period. This is done by removing a piece of data from the beginning of the observation. If polycos, or parfile are used, then the phase is given by the polycos. If a constant period is used then the beginning of the observation is assumed to be phase=0.0. (Default: First pulse period begins at start of observation).", default=0.0)
