@@ -8,6 +8,7 @@ Patrick Lazarus, August 28th, 2009
 """
 
 import optparse
+import types
 
 # Default colour (reset to this colour)
 DEFAULT_CODE = "\033[0;39;49m"
@@ -61,31 +62,44 @@ def cset(preset=None, fg='default', bg='default', **attr):
         if preset in preset_codes:
             current_code = preset_codes[preset]
         else:
-            print "Unrecognized preset color code!"
+            print "Unrecognized preset color code:", preset
     else:
         set_attr = []
+        error = False
         for a in attr.keys():
             if (a in attributes):
                 if (attr[a]):
                     set_attr.append(str(attributes[a]))
             else:
-                print "Unrecognized attribute: %s" % a
+                print "Unrecognized attribute:", a
+                error = True
+        
         if len(set_attr) == 0:
             set_attr = ['0']
+        
         if fg in fg_colours:
             fg_val = fg_colours[fg]
+        elif type(fg) == types.IntType or fg.isdigit():
+            fg_val = str(fg)
         else:
-            # assume fb is a code
-            fg_val = fg
+            print "Unrecognized foreground colour:", fg
+            error = True
             
         if bg in bg_colours:
             bg_val = bg_colours[bg]
+        elif type(bg) == types.IntType or bg.isdigit():
+            bg_val = str(bg)
         else:
-            # assume bg is a code
-            bg_val = bg
-            
-        current_code = '\033[%s;%s;%sm' % (";".join(set_attr), \
-                            fg_val, bg_val)
+            print "Unrecognized background colour:", bg
+            error = True
+        
+        if error:
+            # Don't update current colour code
+            pass
+        else:
+            current_code = '\033[%s;%s;%sm' % (";".join(set_attr), \
+                                fg_val, bg_val)
+                                
 
 
 def creset():
@@ -110,7 +124,7 @@ def cstring(s, *override, **kwoverride):
     temp_code = current_code
     cset(*override, **kwoverride)
     
-    coloured_s = current_code + s + DEFAULT_CODE
+    coloured_s = current_code + str(s) + DEFAULT_CODE
     
     current_code = temp_code
     return coloured_s
