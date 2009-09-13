@@ -239,9 +239,9 @@ def plot_data(tempo_results, xkey, ykey, postfit=True, prefit=False, \
                                 mjd_min - binpsr.par.PB, -binpsr.par.PB)
             for mjd in guess_mjds:
                 peri_mjd = binpsr.most_recent_peri(float(mjd))
-                if xopt == 'mjd':
+                if xkey == 'mjd':
                     plt.axvline(peri_mjd, ls=':', label='_nolegend_', c='k', lw=0.5)
-                elif xopt == 'year':
+                elif xkey == 'year':
                     print "plotting peri passage"
                     plt.axvline(mjd_to_year(peri_mjd), ls=':', label='_nolegend_', c='k', lw=0.5)
             plt.xlim((xmin, xmax))
