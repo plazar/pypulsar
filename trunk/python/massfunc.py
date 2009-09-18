@@ -1,15 +1,31 @@
-# simple script to solve mass fuction assuming sini=1, m_pulsar=1.4
+#!/usr/bin/env python
+# Simple script to find minimum companion mass for a binary pulsar
+# given the mass function
+#           Patrick Lazarus, Sept. 18th, 2009
+
 import sys
+import optparse
+
 import numpy as np
 
-if len(sys.argv) <= 1:
-    sys.stderr.write("Need to provide mass function (in solar masses) as first argument. Exiting!")
+parser = optparse.OptionParser()
+parser.add_option('-m', '--pulsar-mass', dest='mp', type='float', \
+                    help="Use given pulsar mass, measured in solar masses." \
+                         "(Default: 1.4 solar masses.)", default=1.4)
+parser.add_option('-f', '--mass-function', dest='mf', type='float', \
+                    help="Use given mass function, measured in solar masses.")
+parser.add_option('-s', '--sini', dest='sini', type='float', \
+                    help="Use given sini. (Default: 1.0)", default=1.0)
+(options, sys.argv) = parser.parse_args()
+
+if not hasattr(options, 'mf'):
+    sys.stderr.write("Mass function (in solar masses) is required. Exiting!\n")
     sys.exit(1)
-mf = float(sys.argv[1])
+mf = options.mf
 # Default pulsar mass
-mp = 1.4
+mp = options.mp
 # Default inclination
-sini = 1
+sini = options.sini
 
 # Coefficients for cubic equation
 a = -mf/sini**3
@@ -19,8 +35,11 @@ p = np.array([1,a,b,c])
 roots = np.roots(p)
 realroots = np.real(roots[np.isreal(roots)])
 if realroots.size == 1:
-    print "Minimum pulsar mass (assuming Mp=1.4):", realroots[0], "M_solar"
+    print "Minimum companion mass (assuming Mp=%g, sini=%g): %f Msun" % \
+                (options.mp, options.sini, realroots[0])
 else:
-    print "Minimum pulsar mass (assuming Mp=1.4): ** Multiple real-valued solutions **"
-    print realroots, "M_solar"
+    print "Minimum companion mass (assuming Mp=%f, sini=%f): " % \
+                (options.mp, options.sini)
+    print "\t** Multiple real-valued solutions **"
+    print "\t%f Msun" % realroots
     
