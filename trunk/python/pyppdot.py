@@ -155,7 +155,7 @@ def params_from_ppdot(p, pdot):
     return (bfield, age, edot)
 
 
-def plot_data(pulsars, hightlight=[]):
+def plot_data(pulsars, hightlight=[], binaries=False):
     """Plot P-Pdot diagram using list of pulsars provided.
     """
     global scatt_psrs, scatt_psrs_hl
@@ -190,7 +190,7 @@ def plot_data(pulsars, hightlight=[]):
     scatt_binaries = ax.scatter(np.log10(periods_bnry), np.log10(pdots_bnry), \
                                 s=50, lw=2, facecolor='none', \
                                 edgecolor='g', label='binary')
-    if True:
+    if binaries:
         # Hide binaries for now
         scatt_binaries.set_visible(False)
     plt.xlabel("log Period")
@@ -388,18 +388,21 @@ def keypress(event):
             print "-"*80
             
 
-def create_plot(pulsars, highlight=[], interactive=True):
+def create_plot(pulsars, highlight=[], interactive=True, binaries=False):
     """Create the plot and set up event handlers.
+        pulsars - a list of pulsar objects
+        highlight - a list of pulsar objects to highlight
+        interactive - boolean, enter interative mode after making the plot
+        binaries - boolean, intial state for marking binaries on the plot
     """
     fig = plt.figure(figsize=(11,8.5))
     plot_data(pulsars, highlight)
     
-    # Register event callbacks function and show the plot
-    cid_keypress = fig.canvas.mpl_connect('key_press_event', keypress)
-    cid_mousepress = fig.canvas.mpl_connect('button_press_event', mousepress)
-    cid_pick = fig.canvas.mpl_connect('pick_event', pick)
-    
     if interactive:
+        # Register event callbacks function and show the plot
+        cid_keypress = fig.canvas.mpl_connect('key_press_event', keypress)
+        cid_mousepress = fig.canvas.mpl_connect('button_press_event', mousepress)
+        cid_pick = fig.canvas.mpl_connect('pick_event', pick)
         plt.ion()
         plt.show()
 
@@ -487,10 +490,11 @@ def main():
         pulsars += parse_pulsar_file(file)
     for hl in options.highlight:
         highlight += parse_pulsar_file(hl)
-    create_plot(pulsars)
+    create_plot(pulsars, binaries=options.binary)
 
 if __name__=='__main__':
     parser = optparse.OptionParser()
     parser.add_option('-f', '--file', dest='files', type='string', action='append', help="File containing a list of pulsars to display with ATNF catalogue. Each pulsar should be on a separate row with the following format:\nName period pdot dm binary associations pulsar_type.\nEach column should contain a single string (no space), and '*' should be used as a null value.", default=[])
     parser.add_option('--highlight', dest='highlight', type='string', action='append', help="File containing a list of pulsars to display with ATNF catalogue. These pulsars will be highlighed (displayed with a star instead of a point). See -f/--file option for formatting.", default=[])
+    parser.add_option('-b', '--binary', dest='binary', action='store_true', help="Mark binary pulsars. This is the initial state, binary marking can be toggled interactively. (Default: Don't distinguish binaries.)", default=False)
     main()
