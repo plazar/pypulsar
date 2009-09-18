@@ -178,6 +178,21 @@ def plot_data(pulsars, hightlight=[]):
                                     c='r', s=50, label='highlight', picker=10, \
                                     marker=(5,1,0), edgecolors='none')
 
+    # Mark binaries
+    periods_bnry = np.array([x.p for x in pulsars \
+                            if x.p is not None and h.pdot is not None \
+                                and x.binary==True])
+    pdots_bnry = np.array([x.pdot for x in pulsars \
+                            if x.p is not None and h.pdot is not None \
+                                and x.binary==True])
+    print "%d binary pulsars." % periods_bnry.size
+    global scatt_binaries
+    scatt_binaries = ax.scatter(np.log10(periods_bnry), np.log10(pdots_bnry), \
+                                s=50, lw=2, facecolor='none', \
+                                edgecolor='g', label='binary')
+    if True:
+        # Hide binaries for now
+        scatt_binaries.set_visible(False)
     plt.xlabel("log Period")
     plt.ylabel("log P-dot")
     plt.title("P vs. P-dot")
@@ -346,6 +361,14 @@ def keypress(event):
             # Go forward to next plot view
             print "Going forward..."
             event.canvas.toolbar.forward()
+        elif event.key.lower() == 'b':
+            # Mark binaries
+            print "Toggling binaries..."
+            global scatt_binaries
+            visible = scatt_binaries.get_visible()
+            # visible is True/False. 'not visible' will toggle state.
+            scatt_binaries.set_visible(not visible)
+            event.canvas.draw()
         elif event.key == 'h':
             # Display help
             print "Helping..."
@@ -358,6 +381,7 @@ def keypress(event):
             print "\to - Go to original view"
             print "\t< - Go to previous view"
             print "\t> - Go to next view"
+            print "\tb - Toggle binary marking"
             print "\t[Left mouse] - Select pulsar (display info in terminal)"
             print "\t             - Select zoom region (if Zoom-mode is on)"
             print "\t[Middle mouse] - Display P, P-dot, B, E-dot and age at mouse pointer"
