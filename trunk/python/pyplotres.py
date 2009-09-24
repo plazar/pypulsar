@@ -12,6 +12,7 @@ import os
 import types
 import warnings
 
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -207,6 +208,11 @@ def plot_data(tempo_results, xkey, ykey, postfit=True, prefit=False, \
             axes.append(plt.subplot(numsubplots, 1, subplot))
         else:
             axes.append(plt.subplot(numsubplots, 1, subplot, sharex=axes[0]))
+        
+        # set tick formatter to not use scientific notation or an offset
+        tick_formatter = matplotlib.ticker.ScalarFormatter(useOffset=False)
+        tick_formatter.set_scientific(False)
+        axes[-1].xaxis.set_major_formatter(tick_formatter)
         
         for lo,hi in tempo_results.freqbands:
             freq_label = get_freq_label(lo, hi)
