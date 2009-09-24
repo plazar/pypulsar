@@ -180,29 +180,28 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
                         if x.p is not None and x.pdot is not None])
     pdots = np.array([x.pdot for x in pulsars \
                         if x.p is not None and x.pdot is not None])
+    
     ax = plt.axes()
     scatt_psrs = ax.scatter(np.log10(periods), np.log10(pdots), c='k', s=6, \
                             label='pulsars', picker=10, zorder=0)
 
     # Pulsars to highlight
     if len(highlight):
-        print "Highlighting %d pulsars." % len(highlight)
         periods_hl = np.array([h.p for h in highlight \
                             if h.p is not None and h.pdot is not None])
         pdots_hl = np.array([h.pdot for h in highlight \
                             if h.p is not None and h.pdot is not None])
         scatt_psrs_hl = ax.scatter(np.log10(periods_hl), np.log10(pdots_hl), \
                                     c='r', s=50, label='highlight', picker=10, \
-                                    marker=(5,1,0), edgecolors='none', zorder=1)
+                                    marker=(5,1,0), edgecolors='r', zorder=1)
 
     # Mark binaries
     periods_bnry = np.array([x.p for x in pulsars \
-                            if x.p is not None and h.pdot is not None \
+                            if x.p is not None and x.pdot is not None \
                                 and x.binary==True])
     pdots_bnry = np.array([x.pdot for x in pulsars \
-                            if x.p is not None and h.pdot is not None \
+                            if x.p is not None and x.pdot is not None \
                                 and x.binary==True])
-    print "%d binary pulsars." % periods_bnry.size
     global scatt_binaries
     scatter_options = MARKER_OPTIONS.copy()
     scatter_options.update(BINARY_MARKER)
@@ -213,13 +212,12 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
         scatt_binaries.set_visible(False)
 
     # Mark RRATs
-    periods_rrat = np.array([x.p for x in pulsars \
-                            if x.p is not None and h.pdot is not None \
+    periods_rrat = np.array([x.p for x in pulsars+highlight \
+                            if x.p is not None and x.pdot is not None \
                                 and x.rrat==True])
-    pdots_rrat = np.array([x.pdot for x in pulsars \
-                            if x.p is not None and h.pdot is not None \
+    pdots_rrat = np.array([x.pdot for x in pulsars+highlight \
+                            if x.p is not None and x.pdot is not None \
                                 and x.rrat==True])
-    print "%d RRATs." % periods_rrat.size
     global scatt_rrats
     scatter_options = MARKER_OPTIONS.copy()
     scatter_options.update(RRAT_MARKER)
@@ -231,12 +229,11 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
 
     # Mark magnetars
     periods_mag = np.array([x.p for x in pulsars \
-                            if x.p is not None and h.pdot is not None \
+                            if x.p is not None and x.pdot is not None \
                                 and x.magnetar==True])
     pdots_mag = np.array([x.pdot for x in pulsars \
-                            if x.p is not None and h.pdot is not None \
+                            if x.p is not None and x.pdot is not None \
                                 and x.magnetar==True])
-    print "%d magnetars." % periods_mag.size
     global scatt_magnetars
     scatter_options = MARKER_OPTIONS.copy()
     scatter_options.update(MAGNETAR_MARKER)
@@ -248,12 +245,11 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
 
     # Mark SNRs
     periods_snr = np.array([x.p for x in pulsars \
-                            if x.p is not None and h.pdot is not None \
+                            if x.p is not None and x.pdot is not None \
                                 and x.snr==True])
     pdots_snr = np.array([x.pdot for x in pulsars \
-                            if x.p is not None and h.pdot is not None \
+                            if x.p is not None and x.pdot is not None \
                                 and x.snr==True])
-    print "%d supernova remant associations." % periods_snr.size
     global scatt_snrs
     scatter_options = MARKER_OPTIONS.copy()
     scatter_options.update(SNR_MARKER)
@@ -277,7 +273,14 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
     draw_age_line(1e3, plimits, pdotlimits)
     draw_age_line(1e6, plimits, pdotlimits)
     draw_age_line(1e9, plimits, pdotlimits)
-    
+
+    print "Plot Inventory:"
+    print "\tNumber of pulsars:", (periods.size + periods_hl.size)
+    print "\tNumber highlighted:", periods_hl.size
+    print "\tNumber of RRATs:", periods_rrat.size
+    print "\tNumber of magnetars:", periods_mag.size
+    print "\tNumber of binaries:", periods_bnry.size
+    print "\tNumber of SNR associations:", periods_snr.size
 
 def draw_bfield_line(bfield, plimits, pdotlimits):
     """Draw and annotate a line of constant B-field.
@@ -362,9 +365,9 @@ def quit():
     sys.exit(0)
 
 
-def savefigure(savefn='./ppdot.ps'):
-        print "Saving plot to %s" % savefn
-        plt.savefig(savefn, orientation='landscape', papertype='letter')
+def savefigure(savefn='./ppdot.pdf'):
+    print "Saving plot to %s" % savefn
+    plt.savefig(savefn, orientation='landscape', papertype='letter')
 
 
 def mousepress(event):
@@ -509,17 +512,35 @@ def create_plot(pulsars, highlight=[], interactive=True, binaries=False, \
         plt.show()
 
 
-def parse_pulsar_file(psrfn='pulsars.txt'):
+def parse_pulsar_file(psrfn='pulsars.txt', indent=""):
     """Parse list of pulsars.
         Return a list of Pulsar objects.
     """
-    print "Parsing file (%s)" % psrfn
+    print indent+"Parsing file (%s)" % psrfn
     pulsars = []
     nonplottable = 0
+    
+    # Check if file exists
+    if not os.path.exists(psrfn):
+        print indent+"    File not found: %s" % psrfn
+        return pulsars
+    
     psrfile = open(psrfn, 'r')
     for line in psrfile.readlines():
+        line = line.partition('#')[0].strip()
+        if len(line) == 0:
+            continue
         split_line = line.split()
-        name = split_line[0]
+
+        if split_line[0].upper() == 'INCLUDE':
+            # include pulsars from other files.
+            for fn in split_line[1:]:
+                print indent+"    INCLUDE'ing another file."
+                newindent=indent+'    '
+                pulsars += parse_pulsar_file(fn, indent=newindent)
+            continue
+        else:
+            name = split_line[0]
         
         if split_line[1] == '*':
             p = None
@@ -574,13 +595,15 @@ def parse_pulsar_file(psrfn='pulsars.txt'):
             psrtype = split_line[8]
         pulsars.append(Pulsar(name, p, pdot, raj, decj, dm, \
                                 binarytype, assoc, psrtype))
-    print "\tNumber of pulsars that cannot be plotted (no P or Pdot): %d" % nonplottable
+    print indent+"    Number of pulsars that cannot be plotted (no P or Pdot): %d" % nonplottable
+    print indent+"    Done parsing file."
     return pulsars
 
 
 def parse_options():
     (options, sys.argv) = parser.parse_args()
     return options
+
 
 def main():
     global pulsars
@@ -592,7 +615,16 @@ def main():
         pulsars += parse_pulsar_file(file)
     for hl in options.highlight:
         highlight += parse_pulsar_file(hl)
-    create_plot(pulsars, binaries=options.binaries, magnetars=options.magnetars, \
+
+    # Eliminate duplicate pulsars, based on name
+    psr_dict = {}
+    for psr in pulsars:
+        psr_dict[psr.name] = psr
+    for hl in highlight:
+        if hl.name in psr_dict:
+            del psr_dict[hl.name]
+    pulsars = psr_dict.values()
+    create_plot(pulsars, highlight, binaries=options.binaries, magnetars=options.magnetars, \
                 rrats=options.rrats, snrs=options.snrs)
 
 if __name__=='__main__':
