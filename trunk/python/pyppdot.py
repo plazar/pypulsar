@@ -25,6 +25,9 @@ RRAT_MARKER = {'marker':'s', 'edgecolor':'c', 'label':'rrat'}
 MAGNETAR_MARKER = {'marker':'^', 'edgecolor':'m', 'label':'magnetar'}
 SNR_MARKER = {'marker':(4,1,0), 'edgecolor':'y', 'label':'snr'}
 
+# Picker determines how far mouse can be from point to select it
+PICKER = 100
+
 class Pulsar:
     def __init__(self, name, p, pdot, raj, decj, dm, \
                     binarytype, assoc, psrtype):
@@ -198,7 +201,7 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
     
     ax = plt.axes()
     scatt_psrs = ax.scatter(np.log10(periods), np.log10(pdots), c='k', s=6, \
-                            label='pulsars', picker=100, zorder=0)
+                            label='pulsars', picker=PICKER, zorder=0)
 
     # Pulsars to highlight
     if len(highlight):
@@ -207,7 +210,7 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
         pdots_hl = np.array([h.pdot for h in highlight \
                             if h.p is not None and h.pdot is not None])
         scatt_psrs_hl = ax.scatter(np.log10(periods_hl), np.log10(pdots_hl), \
-                                    c='r', s=50, label='highlight', picker=100, \
+                                    c='r', s=50, label='highlight', picker=PICKER, \
                                     marker=(5,1,0), edgecolors='r', zorder=1)
 
     # Mark binaries
