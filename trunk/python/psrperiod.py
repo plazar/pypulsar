@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 
-import sys, subprocess, os
+import sys
+import subprocess
+import os
+import os.path
 
 debug = False
 
@@ -22,12 +25,22 @@ def get_period_phase_at_mjd(psr, mjd):
     if len(lines): psr = lines[0]
     parfile.close()
 
-    polyco_cmd = "/homes/borg/champion/bin/sigproc-3.5/polyco %s -mjd %r -par %s > /dev/null" % (psr, mjd, parfilename)
+    # Check if computer is 32/64-bits
+    if os.uname()[4] == 'i686':
+        # 32-bit
+        bin_dir = "/homes/borg/champion/bin/sigproc-3.5/"
+    else:
+        # 64-bit
+        bin_dir = "/homes/borg/champion/bin/sigproc-3.5-64b/"
+
+    polyco_cmd = "%s %s -mjd %r -par %s > /dev/null" % \
+                    (os.path.join(bin_dir, "polyco"), psr, mjd, parfilename)
     if debug: print polyco_cmd
     polyco = subprocess.Popen(polyco_cmd, shell=True)
     polyco.wait()
     
-    polyco2period_cmd = "/homes/borg/champion/bin/sigproc-3.5/polyco2period %r -p polyco.dat" % mjd
+    polyco2period_cmd = "%s %r -p polyco.dat" % \
+                            (os.path.join(bin_dir, "polyco2period"), mjd)
     if debug: print polyco2period_cmd
     polyco2period = subprocess.Popen(polyco2period_cmd, shell=True, stdout=subprocess.PIPE)
     polyco2period.wait()
