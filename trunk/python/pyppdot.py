@@ -292,14 +292,9 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
     plt.xlabel("log Period")
     plt.ylabel(r"log $\mathsf{\dot P}$")
     plt.title(r"$\mathsf{P-\dot P}$ Diagram")
-    plimits = np.array((0.001, 100))
-    pdotlimits = np.array((10**-22, 10**-8))
-    for b in bsurfs:
-        draw_bfield_line(b, plimits, pdotlimits)
-    for e in edots:
-        draw_edot_line(e, plimits, pdotlimits)
-    for a in ages:
-        draw_age_line(a, plimits, pdotlimits)
+    plt.xlim(np.log10((0.001, 100)))
+    plt.ylim(np.log10((10**-22, 10**-8)))
+    draw_lines(bsurfs, edots, ages)
 
     print "Plot Inventory:"
     print "\tNumber of pulsars:", (periods.size + periods_hl.size)
@@ -309,82 +304,37 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
     print "\tNumber of binaries:", periods_bnry.size
     print "\tNumber of SNR associations:", periods_snr.size
 
-def draw_bfield_line(bfield, plimits, pdotlimits):
-    """Draw and annotate a line of constant B-field.
+def draw_lines(bfields=[], edots=[], ages=[], label=False):
+    """Draw multiple lines of constant B-field, edot and age.
     """
-    ax = plt.gca()
-    ax.plot(np.log10(plimits), np.log10(pdot_from_bfield(plimits, bfield)), 'k-.')
-    ax.set_xlim(np.log10(plimits))
-    ax.set_ylim(np.log10(pdotlimits))
-    #annotate_line(bfield, 'G', plimits, pdotlimits, pdot_from_bfield, p_from_bfield)
-
-
-def draw_edot_line(edot, plimits, pdotlimits):
-    """Draw and annotate a line of constant E-dot.
-    """
-    ax = plt.gca()
-    ax.plot(np.log10(plimits), np.log10(pdot_from_edot(plimits, edot)), 'k--')
-    ax.set_xlim(np.log10(plimits))
-    ax.set_ylim(np.log10(pdotlimits))
-    #annotate_line(edot, 'erg/s', plimits, pdotlimits, pdot_from_edot, p_from_edot)
-
-
-def draw_age_line(age, plimits, pdotlimits):
-    """Draw and annotate a line of constant age.
-    """
-    ax = plt.gca()
-    ax.plot(np.log10(plimits), np.log10(pdot_from_age(plimits, age)), 'k:')
-    ax.set_xlim(np.log10(plimits))
-    ax.set_ylim(np.log10(pdotlimits))
-    #annotate_line(age, 'yr', plimits, pdotlimits, pdot_from_age, p_from_age)
-
-
-def annotate_line(value, units, xlimits, ylimits, pdot_from_value, p_from_value):
-    """Neatly annotate a line of constant B-field/E-dot/age on figure.
-        value: the value of the line
-        units: the units to display
-        xlimits, ylimits: min/max values of x- and y- axes
-        pdot_from_value: a function to calculate pdot given p and value
-        p_from_value: a function to calculate p given pdot and value
-    """
-    # Generate text for annotation
-    exponent = int(np.log10(value))
-    # Round matissa to 1 decimal place
-    mantissa = np.round(10**(np.log10(value)-exponent),1)
-    if mantissa != 1.0:
-        mult = r"%0.1f \times " % mantissa
-    else:
-        mult = ""
-    label_text = r"$%s10^{%d} %s$" % (mult, exponent, units)
-    
-    trans = plt.gca().transData + plt.gcf().transFigure.inverted()
-    xi,xf = np.log10(xlimits)
-    yi = np.log10(pdot_from_value(10**xi, value))
-    yf = np.log10(pdot_from_value(10**xf, value))
-    xi_trans,yi_trans = trans.transform((xi,yi))
-    xf_trans,yf_trans = trans.transform((xf,yf))
-    slope = float(yf_trans-yi_trans)/float(xf_trans-xi_trans)
-    angle = np.arctan(slope)*180/np.pi
-    ylim_i, ylim_f = plt.gca().get_ylim()
-    if yf > ylim_i and yf < ylim_f:
-        # line intersects right edge of plot window
-        pass
-    elif yi > ylim_i and yf < ylim_i:
-        # line intersects bottom edge of plot window
-        yf = np.log10(ylimits[0])
-        xf = np.log10(p_from_value(10**yf, value))
-        xf_trans,yf_trans = trans.transform((xf,yf))
-    elif yi < ylim_f and yf > ylim_f:
-        # line intersects top edge of plot window
-        yf = np.log10(ylimits[1])
-        xf = np.log10(p_from_value(10**yf, value))
-        xf_trans,yf_trans = trans.transform((xf,yf))
-    else:
-        # line doesn't pass through plot window
-        return
-    # Write annotation on figure
-    plt.figtext(xf_trans, yf_trans, label_text, \
-                    rotation=angle, verticalalignment='center')
+    plimits = plt.xlim()
+    pdotlimits = plt.ylim()
+    periods = np.linspace(plimits[0], plimits[1], 100)
+    pdots = np.linspace(pdotlimits[0], pdotlimits[1], 100)
+    bfield_vals = np.zeros((periods.size, pdots.size))
+    edot_vals = np.zeros((periods.size, pdots.size))
+    age_vals = np.zeros((periods.size, pdots.size))
+    for i in np.arange(periods.size):
+        for j in np.arange(pdots.size):
+            f, fdot = psr_utils.p_to_f(10**periods[i], 10**pdots[j])
+            # For some reason the transpose is expected by 'contour'...
+            bfield_vals[j][i] = psr_utils.pulsar_B(f, fdot)
+            edot_vals[j][i] = psr_utils.pulsar_edot(f, fdot)
+            age_vals[j][i] = psr_utils.pulsar_age(f, fdot)
+    if len(bfields) > 1:
+        cs_bfield = plt.contour(periods, pdots, bfield_vals, bfields, \
+                                colors='k', linestyles='dashdot')
+        if label: plt.clabel(cs_bfield, fmt=r'%g $G$')
+    if len(edots) > 1:
+        cs_edot = plt.contour(periods, pdots, edot_vals, edots, \
+                                colors='k', linestyles='dashed')
+        if label: plt.clabel(cs_edot, fmt=r'%g $erg/s$')
+    if len(ages) > 1:
+        cs_age = plt.contour(periods, pdots, age_vals, ages, \
+                                colors='k', linestyles='dotted')
+        if label: plt.clabel(cs_age, fmt=r'%g $yr$')
+    plt.xlim(plimits)
+    plt.ylim(pdotlimits)
     
 
 def quit():
@@ -539,6 +489,7 @@ def create_plot(pulsars, highlight=[], interactive=True, **kwargs):
         snrs - boolean, intial state for marking snrs on the plot
     """
     fig = plt.figure(figsize=(11,8.5))
+    fig.canvas.set_window_title("P-Pdot")
     plot_data(pulsars, highlight, **kwargs)
     
     if interactive:
