@@ -11,29 +11,132 @@
 import sys
 import numpy as np
 import scipy.optimize as opt
-import pylab as plt
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+
 import prepfold
 import psr_utils
 import coordconv
 import estimate_snr
 debug = 1
 
-def read_pfds(pfdfns):
+class Observation:
+    """ Observation object
     """
-    Read pfd files and return arrays of snr, ra and dec
+    def __init__(self, pfdfn):
+        """
+        Read pfd file and return arrays of snr, ra and dec
     
-    Input: pfdfns - a list of pfd filenames
-    """
-    N = len(pfdfns)
-    snrs = np.zeros(N)
-    ras = np.zeros(N)
-    decs = np.zeros(N)
-    for ii, pfdfn in enumerate(pfdfns):
-        p = prepfold.pfd(pfdfn)
-        snrs[ii] = ((np.array(p.bestprof.profile)-p.bestprof.prof_avg)/p.bestprof.prof_std).max()/np.sqrt(p.T/p.bary_p1)
-        ras[ii] = coordconv.rastr_to_deg(coordconv.fmrastr_to_rastr(p.rastr))*60 # RA in arcmin
-        decs[ii] = coordconv.decstr_to_deg(coordconv.fmdecstr_to_decstr(p.decstr))*60 # dec in arcmin
-    return snrs, ras, decs
+        Input: pfdfn - a pfd filename
+        """
+        self.p = prepfold.pfd(pfdfn)
+        # RA in arcmin
+        print self.p.rastr
+        self.ra = coordconv.rastr_to_deg(coordconv.fmrastr_to_rastr(self.p.rastr))*60
+        # Dec in arcmin
+        print self.p.decstr
+        self.dec = coordconv.decstr_to_deg(coordconv.fmdecstr_to_decstr(self.p.decstr))*60
+        self.snr = None
+        self.width = None
+        
+        self.get_snr(self.p)
+
+    def get_snr(self, pfd):
+        """
+        Return signal-to-noise ratio for the pfd object.
+
+        Input: pfd - a pfd object.
+        """
+        self.fig = plt.figure()
+        self.ax = plt.gca()
+        plt.plot(pfd.bestprof.profile, 'k-')
+        self.cid_keypress = self.fig.canvas.mpl_connect('key_press_event', \
+                                                            self.keypress)
+        self.cid_mouseclick = self.fig.canvas.mpl_connect('button_press_event', \
+                                                            self.mousepress)
+        self.rectprops = dict(facecolor='blue', edgecolor='blue', linewidth=2, \
+                                alpha=0.5, fill=True)
+        ymin, ymax = self.ax.get_ylim()
+        self.to_draw = Rectangle((0,ymin-1e10), 0, ymax-ymin+2e10, visible=False, \
+                                    **self.rectprops)
+        self.ax.add_patch(self.to_draw)
+        self.eventpress = None
+
+        plt.show()
+
+    def mousepress(self, event):
+        if event.inaxes and event.button==1:
+            self.mousepressed = True
+            self.cid_mousemove = self.fig.canvas.mpl_connect('motion_notify_event', \
+                                                                self.mousemove)
+            self.cid_mouserelease = self.fig.canvas.mpl_connect('button_release_event', \
+                                                                self.mouserelease)
+            self.eventpress = event
+            self.to_draw.set_visible(True)
+            self.fig.canvas.draw()
+
+    def mousemove(self, event):
+        # update rectangle, draw
+        if event.inaxes:
+            xmin = self.eventpress.xdata
+            xmax = event.xdata
+            # Switch xmin/xmax
+            if xmin > xmax: 
+                xmin, xmax = xmax, xmin
+            if xmin < 0:
+                xmin = 0
+            if xmax > len(self.p.bestprof.profile)-1:
+                xmax = len(self.p.bestprof.profile)-1
+            xmin = int(np.round(xmin))
+            xmax = int(np.round(xmax))
+            self.to_draw.set_x(xmin)
+            self.to_draw.set_width(xmax-xmin)
+            self.fig.canvas.draw_idle()
+        
+    def mouserelease(self, event):
+        # remove rectangle (flash in red first for effect)
+        self.to_draw.set_facecolor('red')
+        self.to_draw.set_edgecolor('red')
+        self.fig.canvas.draw()
+        self.to_draw.set_visible(False)
+        self.fig.canvas.draw()
+        self.to_draw.set_facecolor('blue')
+        self.to_draw.set_edgecolor('blue')
+            
+        # compute snr and pulse width
+        xmin = self.eventpress.xdata
+        xmax = event.xdata
+        # Switch xmin/xmax
+        if xmin > xmax: 
+            xmin, xmax = xmax, xmin
+        if xmin < 0:
+            xmin = 0
+        if xmax > len(self.p.bestprof.profile)-1:
+            xmax = len(self.p.bestprof.profile)-1
+        xmin = int(np.round(xmin))
+        xmax = int(np.round(xmax))
+
+        offpulse = np.concatenate((self.p.bestprof.profile[:xmin], \
+                                    self.p.bestprof.profile[xmax:]))
+        mean = offpulse.mean()
+        std = offpulse.std()
+        self.snr = ((self.p.bestprof.profile - mean) / std).max()
+        self.width = xmax-xmin
+        
+        # disconnect mousemove, mouserelease and reset state
+        self.eventpress = None
+        self.mousepressed = False
+        self.fig.canvas.mpl_disconnect(self.cid_mousemove)
+        self.fig.canvas.mpl_disconnect(self.cid_mouserelease)
+
+        # Display width and snr
+        print "SNR:", self.snr
+        print "Width (bins):", self.width
+
+    def keypress(self, event):
+        if event.key == 'enter' and self.snr is not None and \
+                self.width is not None:
+            plt.close(event.canvas.figure.number)
 
 def observed_snr(psrsnr, psrra, psrdec):
     """
@@ -52,7 +155,7 @@ def fit(init_params, data):
     """
     returns (psrsnr, psrra, psrdec), the pulsars parameters found by a fit to data provided
     """
-    snrs, ras, decs = data
+    snrs, ras, decs = data.transpose()
     errorfunction = lambda p: np.ravel(observed_snr(*p)(ras, decs) - snrs)
     if debug:
         output = opt.leastsq(errorfunction, init_params, maxfev=10000, full_output=1)
@@ -80,31 +183,42 @@ def angsep_arcmin(ra1, dec1, ra2, dec2):
 
 
 def main():
-    data = read_pfds(sys.argv[1:])
-    snrs, ras, decs = data
+    observations = [Observation(pfdfn) for pfdfn in sys.argv[1:]]
+    data = np.array([(o.snr, o.ra, o.dec) for o in observations])
     if debug:
         print "data:"
-        for z in zip(snrs, ras, decs):
+        for z in data:
             print "\tSNR:", z[0], "RA:", z[1], "Dec:", z[2]
-    init_params = (snrs.max(), ras.mean(), decs.mean())
+    # Init guess is max SNR, weighted avg of RA, weighted avg of Dec
+    data_T = data.transpose()
+    init_params = (data_T[0].max(), (data_T[0]*data_T[1]).sum()/data_T[0].sum(), \
+                        (data_T[0]*data_T[2]).sum()/data_T[0].sum())
     if debug:
         print "initial parameters:"
         print "\tSNR:", init_params[0], "RA:", init_params[1], "Dec:", init_params[2]
     global beam_profile
-    beam_profile = estimate_snr.EstimateFWHMSNR(3.35/2.0, 1420, 100, 2, 10.4, 24)
+    # Use gain = 1
+    beam_profile = estimate_snr.EstimateFWHMSNR(3.35/2.0, 1420, 100, 2, 1, 24)
     result = fit(init_params, data) 
     if debug:
         print "results:"
         print "\tSNR:", result[0], "RA:", result[1], "Dec:", result[2]
     psrsnr, psrra, psrdec = result
+    snrs, ras, decs = data.transpose()
     plt.figure(figsize=(8.5,11))
     plt.subplot(211)
     plt.title("Fitting gridding observations to determine pulsar position")
-    plt.scatter((ras-psrra)*60/15.0, (decs-psrdec)*60, c=snrs/psrsnr, marker='o')
+    plt.scatter((ras-psrra)*60/15.0, (decs-psrdec)*60, c=snrs, marker='o', label='_nolegend_')
     plt.spring()
     cbar = plt.colorbar()
-    cbar.set_label(r"$SNR/SNR_{PSR}$")
-    plt.scatter(np.array([0]), np.array([0]), s=100, c='k', lw=0, marker=(5,1,0))
+    cbar.set_label(r"$SNR$")
+    plt.scatter(np.array([0]), np.array([0]), s=100, c='k', marker=(5,1,0), \
+                    label='Best PSR posn')
+    if debug:
+        plt.scatter(np.array([init_params[1]-psrra])*60/15.0, \
+                        np.array([init_params[2]-psrdec])*60, \
+                            s=100, c='w', marker=(5,1,0), label='Init PSR posn')
+    plt.legend(loc='best')
     plt.xlabel("RA (sec) + %02.0f:%02.0f:%07.4f" % psr_utils.rad_to_hms(psrra/60.0*psr_utils.DEGTORAD))
     plt.ylabel("Dec (arcsec) + %02.0f:%02.0f:%07.4f" % psr_utils.rad_to_dms(psrdec/60.0*psr_utils.DEGTORAD))
    
@@ -114,12 +228,20 @@ def main():
     maxangsep = obsangseps.max()
     angseps = np.linspace(0,maxangsep*1.1, 1000)
     plt.subplot(212)
-    plt.plot(angseps, beam_profile.gain_at_angular_offset(angseps), 'k', zorder=-1)
-    plt.scatter(obsangseps, snrs/psrsnr, c=snrs/psrsnr, zorder=1)
+    plt.plot(angseps, psrsnr*beam_profile.gain_at_angular_offset(angseps), 'k', zorder=-1)
+    plt.scatter(obsangseps, snrs, c=snrs, zorder=1)
     plt.xlabel("Angular separation (arcmin)")
     plt.ylabel("SNR")
     plt.savefig('gridding.tmp.ps', papertype='letter', orientation='portrait')
+    cid_keypress = plt.gcf().canvas.mpl_connect('key_press_event', \
+                                                    keypress)
     plt.show()
+
+
+def keypress(event):
+    if event.key in ('q', 'Q'):
+        sys.exit(0)
+
 
 if __name__ == '__main__':
     main()
