@@ -108,7 +108,7 @@ def main():
             print "l=%g%s, b=%g%s, freq=%g, (index=%g): temp=%g K" % \
                 (l, deg_symb, b, deg_symb, options.freq, options.index, temp)
     else:
-        sys.stderr.write("No coords provided on command line!")
+        sys.stderr.write("No coords provided on command line!\n")
     
     if options.show:
         show_temp_map(freq=options.freq, index=options.index, \
