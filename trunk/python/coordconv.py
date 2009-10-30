@@ -13,7 +13,7 @@ def decstr_to_rad(decstr):
     """
     decstr = str(decstr) # Ensure decstr is string, not int or float    
     sign, d, m, s = parse_decstr(decstr)
-    
+
     return sign_to_int(sign)*psr_utils.dms_to_rad(float(d), float(m), float(s))
 
 def sign_to_int(sign):
@@ -48,11 +48,12 @@ def parse_decstr(decstr):
 	return ('+', '00', '00', '00')
     decl_sign = decl/abs(decl)
     decl = str(abs(decl))
-    if '.' in decstr:
+    if '.' in decl:
 	decl_split = decl.split('.')
 	decl_split[1] = '.%s' % decl_split[1]
     else:
 	decl_split = [decl, '']
+
     decl_pad = decl_split[0].zfill(6)
 
     if decl_sign == 1:
