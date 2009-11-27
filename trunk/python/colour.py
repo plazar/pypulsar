@@ -99,7 +99,6 @@ def cset(preset=None, fg='default', bg='default', **attr):
         else:
             current_code = '\033[%s;%s;%sm' % (";".join(set_attr), \
                                 fg_val, bg_val)
-                                
 
 
 def creset():
