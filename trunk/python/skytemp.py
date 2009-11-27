@@ -27,14 +27,21 @@ HASLAM_MAP_FILENAME = "/homes/borgii/alfa/research/PALFA/skytemp/" \
 HASLAM_FREQ = 408.0 # MHz
 SYNCHROTRON_INDEX = -2.7
 
-# Read Haslam map
-# healpy outputs some info to stdout, so redirect to /dev/null
-stdout = sys.stdout
-sys.stdout = open('/dev/null', 'w')
-HASLAM_MAP = healpy.read_map(HASLAM_MAP_FILENAME)
-sys.stdout = stdout
+HASLAM_MAP = None
 
 DEGTORAD = np.pi/180.0
+
+def read_map(mapfilename=HASLAM_MAP_FILENAME):
+    """Read HEALPix file 'mapfilename' using 'healpy'
+        and store in global variable 'HASLAM_MAP'.
+    """
+    global HASLAM_MAP
+    # healpy outputs some info to stdout, so redirect to /dev/null
+    stdout = sys.stdout
+    sys.stdout = open('/dev/null', 'w')
+    HASLAM_MAP = healpy.read_map(HASLAM_MAP_FILENAME)
+    sys.stdout = stdout
+
 
 def get_skytemp(gal_long, gal_lat, freq=HASLAM_FREQ, index=SYNCHROTRON_INDEX):
     """Given galactic longitude, latitude and observing
@@ -49,13 +56,17 @@ def get_skytemp(gal_long, gal_lat, freq=HASLAM_FREQ, index=SYNCHROTRON_INDEX):
         index: synchrotron spectrum index
     """
     
+    global HASLAM_MAP
+    if HASLAM_MAP is None:
+        read_map()
+    
     # Theta and Phi angles defined as expected by healpy
     # Theta and Phi are given expected by healpy in radians
     # In (theta, phi) the centre of Galaxy is (pi/2, 0)
     theta = (90.0 - gal_lat)*DEGTORAD
     phi = (gal_long)*DEGTORAD
 
-    # Read map
+    # get value from map
     temp_408 = healpy.get_interp_val(HASLAM_MAP, theta, phi)
 
     # Adjust temperatures for given observing frequency
