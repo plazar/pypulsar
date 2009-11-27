@@ -35,6 +35,22 @@ NUM_TO_MONTH = {1: 'January',
                 11: 'November',
                 12: 'December'}
 
+DAY_TO_NUM = {'Sunday': 0,
+              'Monday': 1,
+              'Tuesday': 2,
+              'Wednesday': 3,
+              'Thursday': 4,
+              'Friday': 5,
+              'Saturday': 6}
+
+NUM_TO_DAY = {0: 'Sunday',
+              1: 'Monday',
+              2: 'Tuesday',
+              3: 'Wednesday',
+              4: 'Thursday', 
+              5: 'Friday',
+              6: 'Saturday'}
+
 
 def JD_to_MJD(JD):
     """Convert Julian Day (JD) to Modified Julian Day (MJD).
@@ -110,6 +126,34 @@ def gregorian_to_JD(year, month, day):
         (Follow Jean Meeus' Astronomical Algorithms, 2nd Ed., Ch. 7)
     """
     return date_to_JD(year, month, day, gregorian=True)
+
+
+def gregorian_to_MJD(year, month, day):
+    """Convert Gregorian date to Modified Julian Day (MJD).
+
+        Inputs:
+            year: integer
+            month:  integer or a string
+            day: float
+    
+        (Follow Jean Meeus' Astronomical Algorithms, 2nd Ed., Ch. 7)
+    """
+    JD = date_to_JD(year, month, day, gregorian=True)
+    return JD_to_MJD(JD)
+    
+
+def julian_to_MJD(year, month, day):
+    """Convert Julian date to Modified Julian Day (MJD).
+
+        Inputs:
+            year: integer
+            month:  integer or a string
+            day: float
+    
+        (Follow Jean Meeus' Astronomical Algorithms, 2nd Ed., Ch. 7)
+    """
+    JD = date_to_JD(year, month, day, gregorian=False)
+    return JD_to_MJD(JD)
 
 
 def JD_to_date(JD):
@@ -196,12 +240,177 @@ def is_julian_leap_year(year):
     return is_leap_year(year, gregorian=False)
 
 
+def first_of_year_JD(year):
+    """Return Julian Day (JD) corresponding to January 0.0 of year.
+        (This is the same as December 31.0 of year-1.)
+
+        Inputs:
+            year: integer
+    """
+    Y = np.floor(year)-1
+    A = np.floor(0.01*Y)
+    JD_0 = np.floor(365.25*Y) - A + np.floor(0.25*A) + 1721424.5
+
+    return JD_0.squeeze()
+
+
+def first_of_year_MJD(year):
+    """Return Modified Julian Day (MJD) corresponding to January 0.0 of year.
+        (This is the same as December 31.0 of year-1.)
+
+        Inputs:
+            year: integer
+    """
+    JD_0 = first_of_year_JD(year)
+    return JD_to_MJD(JD_0)
+
+
+def day_of_year(year, month, day, gregorian=True):
+    """Return day of year given month and day.
+        
+        Inputs:
+            year: integer
+            month: integer
+            day: float
+            gregorian:  - True for Gregorian calendar (Default)
+                        - False for Julian calendar
+        
+        Notes:
+            'year' and 'gregorian' are used to determine if it is
+            a leap year.
+    """
+    year = np.atleast_1d(year)
+    month = np.atleast_1d(month)
+    day = np.atleast_1d(day)
+   
+    leaps = np.atleast_1d(is_leap_year(year, gregorian))
+   
+    K = 2*np.ones_like(year)
+    K[leaps] = 1
+
+    N = np.floor(275.0*month/9.0) - K * np.floor((month+9)/12.0) + day - 30
+    return N.squeeze()
+
+
+def day_of_week(year, month, day):
+    """Return day of week given a date.
+
+        Input:
+            year: integer
+            month: integer
+            day: float
+
+        Note:
+            'gregorian' is not needed because day of week was not
+            changed when adopting Gregorian Calendar.
+    """
+    JD = gregorian_to_JD(year, month, np.floor(day)) + 1.5
+    return np.mod(JD, 7)
+    
+    
 def month_to_num(month):
     """Return month number given the month name, a string.
     """
-    if type(month) != types.StringType:
-        raise TypeError("month must be of type string. type(month): %s" % \
-                            type(month))
-    if month not in MONTH_TO_NUM:
-        raise ValueError("Unrecognized month name: %s" % month)
-    return MONTH_TO_NUM[month]
+    if not hasattr(month, '__iter__'):
+        month = [month]
+    nums = []
+    for m in month:
+        if type(m) != types.StringType:
+            raise TypeError("month must be of type string. type(month): %s" % \
+                                type(m))
+        if m not in MONTH_TO_NUM:
+            raise ValueError("Unrecognized month name: %s" % m)
+        nums.append(MONTH_TO_NUM[month])
+    if len(nums) == 1:
+        nums = nums[0]
+    return nums
+
+
+def num_to_month(month):
+    """Return month name, a string, given the month number.
+    """
+    if not hasattr(month, '__iter__'):
+        month = [month]
+    strings = []
+    for m in month:
+        if type(m) != types.IntType and type(m) != np.int32:
+            raise TypeError("month must be of type integer. type(month): %s" % \
+                                type(m))
+        if m not in NUM_TO_MONTH:
+            raise ValueError("Unrecognized month number: %d" % m)
+        strings.append(NUM_TO_MONTH[m])
+    if len(strings) == 1:
+        strings = strings[0]
+    return strings
+
+
+def date_to_string(year, month, day):
+    """Return a string of the date given.
+        
+        Inputs:
+            year: integer
+            month: integer
+            day: integer
+
+        Output format: 
+            Month day, year
+
+        Notes:
+            Ignore fractional part of day.
+    """
+    year = np.atleast_1d(year)
+    month = np.atleast_1d(month)
+    day = np.atleast_1d(day)
+   
+    month = num_to_month(month)
+    if not hasattr(month, '__iter__'):
+        month = [month]
+   
+    date_strings = []
+    for y, m, d in zip(year, month, day):
+        date_strings.append("%s %d, %d" % (m, d, y))
+    
+    if len(date_strings) == 1:
+        date_strings = date_strings[0]
+    return date_strings
+
+
+def interval_in_days(year1, month1, day1, year2, month2, day2, gregorian=True):
+    """Compute difference between two dates in days.
+        Return date2 - date1
+
+        Inputs:
+            year1: integer
+            month1: integer
+            day1: float
+            year2: integer
+            month2: integer
+            day2: float
+            gregorian:  - True for Gregorian calendar (Default)
+                        - False for Julian calendar
+    """
+    JD1 = date_to_JD(year1, month1, day1, gregorian)
+    JD2 = date_to_JD(year2, month2, day2, gregorian)
+
+    diff = JD2 - JD1
+    return diff.squeeze()
+   
+
+def fraction_of_year(year, month, day, gregorian=True):
+    """Compute fraction of year elapsed.
+        
+        Inputs:
+            year: integer
+            month: integer
+            day: float
+            gregorian:  - True for Gregorian calendar (Default)
+                        - False for Julian calendar
+    """
+    JD_0 = first_of_year_JD(year) + 1
+    JD = date_to_JD(year, month, day, gregorian)
+    diff = JD - JD_0
+    numdays = np.atleast_1d(365*np.ones_like(diff))
+    leaps = np.atleast_1d(is_leap_year(year, gregorian))
+    numdays[leaps] += 1.0
+    frac = diff/numdays
+    return frac.squeeze()
