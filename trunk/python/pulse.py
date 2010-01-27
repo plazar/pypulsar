@@ -14,8 +14,8 @@ import numpy as np
 import scipy.signal
 
 # Import matplotlib/pyplot and set for non-interactive plots
-import matplotlib
-matplotlib.use('Agg')
+# import matplotlib
+# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 class Pulse:
@@ -126,6 +126,20 @@ class Pulse:
             together.
         """
         return self.get_data(self.off_pulse) 
+
+    def get_pulse_energies(self):
+        """Return on- and off- pulse energies based on scaled 
+            pulse profile. Return value is a tuple:
+            (on-energy, off-energy)
+
+            on-pulse energy = sum(on-pulse region)
+            off-pulse energy = sum(off-pulse energy)
+        """
+        copy = self.make_copy()
+        copy.scale()
+        on_energy = np.sum(copy.get_on_pulse())
+        off_energy = np.sum(copy.get_off_pulse())
+        return (on_energy, off_energy)
 
     def make_copy(self):
         """Return a deep copy of 'self'
