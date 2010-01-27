@@ -204,6 +204,7 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
                             label='pulsars', picker=PICKER, zorder=0)
 
     # Pulsars to highlight
+    numhl = 0
     if len(highlight):
         periods_hl = np.array([h.p for h in highlight \
                             if h.p is not None and h.pdot is not None])
@@ -212,6 +213,7 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
         scatt_psrs_hl = ax.scatter(np.log10(periods_hl), np.log10(pdots_hl), \
                                     c='r', s=50, label='highlight', picker=PICKER, \
                                     marker=(5,1,0), edgecolors='r', zorder=1)
+        numhl = periods_hl.size
 
     # Mark binaries
     periods_bnry = np.array([x.p for x in pulsars \
@@ -297,8 +299,8 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
     draw_lines(bsurfs, edots, ages)
 
     print "Plot Inventory:"
-    print "\tNumber of pulsars:", (periods.size + periods_hl.size)
-    print "\tNumber highlighted:", periods_hl.size
+    print "\tNumber of pulsars:", (periods.size + numhl)
+    print "\tNumber highlighted:", numhl
     print "\tNumber of RRATs:", periods_rrat.size
     print "\tNumber of magnetars:", periods_mag.size
     print "\tNumber of binaries:", periods_bnry.size
