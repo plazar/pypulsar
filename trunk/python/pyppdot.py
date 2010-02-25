@@ -23,6 +23,8 @@ MARKER_OPTIONS = {'facecolor':'none', 'zorder':2, 'alpha':0.8, 'lw':2, 's':50}
 BINARY_MARKER = {'marker':'o', 'edgecolor':'g', 'label':'binary'}
 RRAT_MARKER = {'marker':'s', 'edgecolor':'c', 'label':'rrat'}
 MAGNETAR_MARKER = {'marker':'^', 'edgecolor':'m', 'label':'magnetar'}
+SGR_MARKER = {'marker':'<', 'edgecolor':"#AB82FF", 'label':'sgr'}
+AXP_MARKER = {'marker':'>', 'edgecolor':"#FF7F24", 'label':'axp'}
 SNR_MARKER = {'marker':(4,1,0), 'edgecolor':'y', 'label':'snr'}
 
 # Picker determines how far mouse can be from point to select it
@@ -55,6 +57,10 @@ class Pulsar:
         self.rrat = (psrtype is not None and psrtype!='No info' and 'rrat' in psrtype.lower())
         self.magnetar = (psrtype is not None and psrtype!='No info' and \
                             ('axp' in psrtype.lower() or 'sgr' in psrtype.lower()))
+        self.sgr = (psrtype is not None and psrtype!='No info' and \
+                            ('axp' in psrtype.lower() and 'sgr' in assoc.lower()))
+        self.axp = (psrtype is not None and psrtype!='No info' and \
+                            ('axp' in psrtype.lower() and 'sgr' not in assoc.lower()))
         self.snr = (assoc is not None and assoc!='No info' and 'snr' in assoc.lower())
         self.binary = (binarytype is not None and binarytype!='No info')
 
@@ -182,8 +188,8 @@ def params_from_ppdot(p, pdot):
 
 
 def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
-                magnetars=False, snrs=False, edots=[], ages=[], \
-                bsurfs=[]):
+                magnetars=False, snrs=False, axp=False, sgr=False, \
+                edots=[], ages=[], bsurfs=[]):
     """Plot P-Pdot diagram using list of pulsars provided.
         binaries - boolean, initially plot binary markers
         rrats - boolean, initially plot RRAT markers
@@ -272,6 +278,44 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
     else:
         scatt_magnetars = None
 
+    # Mark sgrs
+    periods_sgr = np.array([x.p for x in pulsars \
+                            if x.p is not None and x.pdot is not None \
+                                and x.sgr==True])
+    pdots_sgr = np.array([x.pdot for x in pulsars \
+                            if x.p is not None and x.pdot is not None \
+                                and x.sgr==True])
+    global scatt_sgr
+    if periods_sgr.size:
+        scatter_options = MARKER_OPTIONS.copy()
+        scatter_options.update(SGR_MARKER)
+        scatt_sgr = ax.scatter(np.log10(periods_sgr), np.log10(pdots_sgr), \
+                                    **scatter_options)
+        if not sgr:
+            # Hide sgr for now
+            scatt_sgr.set_visible(False)
+    else:
+        scatt_sgr = None
+
+    # Mark axps
+    periods_axp = np.array([x.p for x in pulsars \
+                            if x.p is not None and x.pdot is not None \
+                                and x.axp==True])
+    pdots_axp = np.array([x.pdot for x in pulsars \
+                            if x.p is not None and x.pdot is not None \
+                                and x.axp==True])
+    global scatt_axp
+    if periods_axp.size:
+        scatter_options = MARKER_OPTIONS.copy()
+        scatter_options.update(AXP_MARKER)
+        scatt_axp = ax.scatter(np.log10(periods_axp), np.log10(pdots_axp), \
+                                    **scatter_options)
+        if not axp:
+            # Hide axp for now
+            scatt_axp.set_visible(False)
+    else:
+        scatt_axp = None
+
     # Mark SNRs
     periods_snr = np.array([x.p for x in pulsars \
                             if x.p is not None and x.pdot is not None \
@@ -346,8 +390,7 @@ def quit():
 
 def savefigure(savefn='./ppdot.ps'):
     print "Saving plot to %s" % savefn
-    plt.savefig(savefn, orientation='landscape', papertype='letter', \
-                    format='ps')
+    plt.savefig(savefn, orientation='landscape', papertype='letter')
 
 
 def mousepress(event):
@@ -447,6 +490,28 @@ def keypress(event):
                 event.canvas.draw()
             else:
                 print "(No magnetars)"
+        elif event.key.lower() == 'g':
+            # Mark sgrs
+            global scatt_sgr
+            if scatt_sgr is not None:
+                print "Toggling SGRs..."
+                visible = scatt_sgr.get_visible()
+                # visible is True/False. 'not visible' will toggle state.
+                scatt_sgr.set_visible(not visible)
+                event.canvas.draw()
+            else:
+                print "(No SGRs)"
+        elif event.key.lower() == 'a':
+            # Mark axps
+            global scatt_axp
+            if scatt_axp is not None:
+                print "Toggling AXPs..."
+                visible = scatt_axp.get_visible()
+                # visible is True/False. 'not visible' will toggle state.
+                scatt_axp.set_visible(not visible)
+                event.canvas.draw()
+            else:
+                print "(No AXPs)"
         elif event.key.lower() == 'n':
             # Mark SNRs
             global scatt_snrs
