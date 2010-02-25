@@ -1,3 +1,6 @@
-__all__ = ['calendar']
+__all__ = ['calendar', 'clock', 'protractor', 'sextant']
 
 import calendar
+import clock
+import protractor
+import sextant

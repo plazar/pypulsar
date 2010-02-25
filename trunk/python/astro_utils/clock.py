@@ -8,6 +8,7 @@ Patrick Lazarus, Nov 20th, 2009
 import types
 import numpy as np
 
+import calendar
 
 def JD_to_mstUT_deg(JD):
     """Given Julian Day (JD) return mean sidereal time (UT)
@@ -21,3 +22,11 @@ def JD_to_mstUT_deg(JD):
                 np.array(0.000387933)*np.power(T,2) - \
                 np.power(T,3)/np.array(38710000.0)
     return mst_deg
+
+
+def MJD_to_mstUT_deg(MJD):
+    """Given Modified Julian Day (MJD) return mean sidereal time (UT)
+        in degrees.
+    """
+    JD = MJD_to_JD(MJD)
+    return JD_to_mstUT_deg(JD)
