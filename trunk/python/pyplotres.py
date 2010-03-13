@@ -184,6 +184,7 @@ class Resids:
 
 def plot_data(tempo_results, xkey, ykey, postfit=True, prefit=False, \
             interactive=True, mark_peri=False, show_legend=True):
+    print "show_legend:", show_legend
     # figure out what should be plotted
     # True means to plot postfit
     # False means to plot prefit
@@ -275,24 +276,9 @@ def plot_data(tempo_results, xkey, ykey, postfit=True, prefit=False, \
         leg.legendPatch.set_alpha(0.5)
     
 
-def create_plot(tempo_results, xkey, ykey, postfit=True, prefit=False, \
-            interactive=True, mark_peri=False, show_legend=True):
+def create_plot():
     # Set up the plot
     fig = plt.figure(figsize=(11,8.5))
-   
-    plot_data(tempo_results, xkey, ykey, postfit, prefit, \
-            interactive, mark_peri, show_legend)
-    
-    # Register event callbacks function and show the plot
-    cid_keypress = fig.canvas.mpl_connect('key_press_event', keypress)
-    cid_pick = fig.canvas.mpl_connect('pick_event', pick)
-    if interactive:
-        plt.ion()
-        plt.show()
-    else:
-        # Save figure and quit
-        savefigure()
-        quit()
 
 
 def get_freq_label(lo, hi):
@@ -303,8 +289,20 @@ def get_freq_label(lo, hi):
 
 
 def savefigure(savefn='./resid2.tmp.ps'):
-        print "Saving plot to %s" % savefn
-        plt.savefig(savefn, orientation='landscape', papertype='letter')
+    print "Saving plot to %s" % savefn
+    plt.savefig(savefn, orientation='landscape', papertype='letter')
+
+
+def reloadplot():
+    # Reload residuals and replot
+    print "Reloading..."
+    print "options.legend:", options.legend
+    plt.clf() # clear figure
+    tempo_results = TempoResults(options.freqbands)
+    plot_data(tempo_results, options.xaxis, options.yaxis, 
+            postfit=options.postfit, prefit=options.prefit, \
+            interactive=options.interactive, \
+            mark_peri=options.mark_peri, show_legend=options.legend)
 
 
 def quit():
@@ -357,6 +355,8 @@ def keypress(event):
             quit()
         elif event.key.lower() == 's':
             savefigure()
+        elif event.key == ' ':
+            reloadplot()
         elif event.key.lower() == 'z':
             # Turn on zoom mode
             print "Toggling zoom mode..."
@@ -410,14 +410,32 @@ def keypress(event):
                 print "Bad values provided!"
                 return
             plt.ylim(ymin, ymax)
-        elif event.key == ' ':
-            # Reload residuals and replot
-            print "Reloading..."
-            plt.clf() # clear figure
-            tempo_results = TempoResults(options.freqbands)
-            plot_data(tempo_results, options.xaxis, options.yaxis, 
-                    options.postfit, options.prefit, options.mark_peri, \
-                    options.legend)
+        elif event.key.lower() == 'u':
+            # Change plot units
+            changed = False
+            print "Setting units. User input required..."
+            axis = raw_input("Which axis (x/y)? ")
+            if axis in ('x', 'X'):
+                xunits = raw_input("Units for X-axis " \
+                                    "(numtoa/mjd/year/orbitphase): ")
+                if xunits.lower() in ('numtoa', 'mjd', 'year', 'orbitphase'):
+                    changed = (xunits != options.xaxis)
+                    options.xaxis = xunits
+                    print "X-axis units set to %s" % xunits
+                else:
+                    print "Unrecognized units for X-axis (%s)!" % xunits
+            elif axis in ('y', 'Y'):
+                yunits = raw_input("Units for Y-axis (usec/phase/sec): ")
+                if yunits.lower() in ('usec', 'phase', 'sec'):
+                    changed = (yunits != options.yaxis)
+                    options.yaxis = yunits
+                    print "Y-axis units set to %s" % yunits
+                else:
+                    print "Unrecognized units for Y-axis (%s)!" % yunits
+            else:
+                print "Unreconized axis choice (%s)!" % axis
+            if changed:
+                reloadplot()
         elif event.key == 'h':
             # Display help
             print "Helping..."
@@ -432,6 +450,7 @@ def keypress(event):
             print "\t> - Go to next view"
             print "\tx - Set x-axis limits (terminal input required)"
             print "\ty - Sey y-axis limits (terminal input required)"
+            print "\tu - Set units (terminal input required)"
             print "\t[Spacebar] - Reload plot"
             print "\t[Left mouse] - Select TOA (display info in terminal)"
             print "\t             - Select zoom region (if Zoom-mode is on)"
@@ -495,9 +514,20 @@ def main():
     global options
     options = parse_options()
     tempo_results = TempoResults(options.freqbands)
-    create_plot(tempo_results, options.xaxis, options.yaxis, options.postfit, \
-            options.prefit, options.interactive, options.mark_peri, \
-            options.legend)
+    create_plot()
+    reloadplot()
+
+    if options.interactive:
+        # Register event callbacks function and show the plot
+        fig = plt.gcf() # current figure
+        cid_keypress = fig.canvas.mpl_connect('key_press_event', keypress)
+        cid_pick = fig.canvas.mpl_connect('pick_event', pick)
+        plt.ion()
+        plt.show()
+    else:
+        # Save figure and quit
+        savefigure()
+        quit()
 
 
 class BadOptionValueError(ValueError):
@@ -507,16 +537,42 @@ class BadOptionValueError(ValueError):
 
 
 if __name__=='__main__':
-    parser = optparse.OptionParser()
-    parser.add_option('-f', '--freq', dest='freqs', action='append', help="Band of frequencies, in MHz, to be plotted (format xxx:yyy). Each band will have a different colour. Multiple -f/--freq options are allowed. (Default: Plot all frequencies in single colour.)", default=[])
-    parser.add_option('-x', '--x-axis', dest='xaxis', type='string', help="Values to plot on x-axis. Must be one of {'numTOA', 'MJD', 'orbitphase', 'year'}. (Default: 'MJD')", default='MJD')
-    parser.add_option('-y', '--y-axis', dest='yaxis', type='string', help="Values to plot on y-axis. Must be one of {'phase', 'usec', 'sec'}. (Default: 'phase')", default='phase')
-    parser.add_option('--post', dest='postfit', action='store_true', help="Show postfit residuals. (Default: Don't show postfit.)", default=False)
-    parser.add_option('--pre', dest='prefit', action='store_true', help="Show prefit residuals. (Default: Don't show prefit.)", default=False)
-    parser.add_option('-l', '--legend', dest='legend', action='store_true', help="Show legend of frequencies. (Default: Do not show legend.)", default=False)
-    parser.add_option('--mark-peri', dest='mark_peri', action='store_true', help="Mark passage of periastron. (Default: don't mark periastron.)", default=False)
-    parser.add_option('--non-interactive', dest='interactive', action='store_false', help="Save figure and exit. (Default: Show plot, only save if requested.)", default=True)
-    
+    parser = optparse.OptionParser(prog="pyplotres.py", \
+                        version="v1.1 Patrick Lazarus (Mar. 13, 2010)")
+    parser.add_option('-f', '--freq', dest='freqs', action='append', \
+                        help="Band of frequencies, in MHz, to be plotted " \
+                             "(format xxx:yyy). Each band will have a " \
+                             " different colour. Multiple -f/--freq options " \
+                             " are allowed. (Default: Plot all frequencies " \
+                             "in single colour.)", \
+                        default=[])
+    parser.add_option('-x', '--x-axis', dest='xaxis', type='string', \
+                        help="Values to plot on x-axis. Must be one of " \
+                             "{'numTOA', 'MJD', 'orbitphase', 'year'}. " \
+                             "(Default: 'MJD')", 
+                        default='MJD')
+    parser.add_option('-y', '--y-axis', dest='yaxis', type='string', \
+                        help="Values to plot on y-axis. Must be one of "
+                             "{'phase', 'usec', 'sec'}. (Default: 'phase')", \
+                        default='phase')
+    parser.add_option('--post', dest='postfit', action='store_true', \
+                        help="Show postfit residuals. (Default: Don't show " \
+                             "postfit.)", \
+                        default=False)
+    parser.add_option('--pre', dest='prefit', action='store_true', \
+                        help="Show prefit residuals. (Default: Don't show " \
+                             "prefit.)", \
+                        default=False)
+    parser.add_option('-l', '--legend', dest='legend', action='store_true', \
+                        help="Show legend of frequencies. (Default: Do not " \
+                             "show legend.)", \
+                        default=False)
+    parser.add_option('--mark-peri', dest='mark_peri', action='store_true', \
+                        help="Mark passage of periastron. (Default: don't " \
+                             "mark periastron.)", \
+                        default=False)
+    parser.add_option('--non-interactive', dest='interactive', \
+                        action='store_false', default=True, \
+                        help="Save figure and exit. (Default: Show plot, " \
+                             "only save if requested.)")
     main()
-
-
