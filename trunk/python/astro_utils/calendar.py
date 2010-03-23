@@ -187,9 +187,9 @@ def JD_to_date(JD):
 
     day = B - D - np.floor(30.6001*E) + F
     month = E - 1
-    month[E==14.0 or E==15.0] = E - 13
+    month[(E==14.0) | (E==15.0)] = E - 13
     year = C - 4716
-    year[month==1.0 or month==2.0] = C - 4715
+    year[(month==1.0) | (month==2.0)] = C - 4715
 
     return (year.astype('int').squeeze(), month.astype('int').squeeze(), \
                 day.squeeze())
