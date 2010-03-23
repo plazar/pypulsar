@@ -21,6 +21,13 @@ import binary_psr
 import parfile as par
 import residuals
 
+# Available x-axis types
+xvals = ['mjd', 'year', 'numtoa', 'orbitphase']
+xind = 0
+# Available y-axis types
+yvals = ['phase', 'usec', 'sec']
+yind = 0
+
 class TempoResults:
     def __init__(self, freqbands=[[0, 'inf']]):
         """Read TEMPO results (resid2.tmp, tempo.lis, timfile and parfiles)
@@ -184,7 +191,6 @@ class Resids:
 
 def plot_data(tempo_results, xkey, ykey, postfit=True, prefit=False, \
             interactive=True, mark_peri=False, show_legend=True):
-    print "show_legend:", show_legend
     # figure out what should be plotted
     # True means to plot postfit
     # False means to plot prefit
@@ -271,9 +277,10 @@ def plot_data(tempo_results, xkey, ykey, postfit=True, prefit=False, \
         figure_text = plt.figtext(0.01, 0.01, fntext, verticalalignment='bottom', \
                             horizontalalignment='left')
     
-    if show_legend:
-        leg = plt.figlegend(handles, labels, 'upper right')
-        leg.legendPatch.set_alpha(0.5)
+    # Make the legend and set its visibility state
+    leg = plt.figlegend(handles, labels, 'upper right')
+    leg.set_visible(show_legend)
+    leg.legendPatch.set_alpha(0.5)
     
 
 def create_plot():
@@ -296,13 +303,19 @@ def savefigure(savefn='./resid2.tmp.ps'):
 def reloadplot():
     # Reload residuals and replot
     print "Reloading..."
-    print "options.legend:", options.legend
+    fig = plt.gcf()
+    fig.set_visible(False)
     plt.clf() # clear figure
     tempo_results = TempoResults(options.freqbands)
     plot_data(tempo_results, options.xaxis, options.yaxis, 
             postfit=options.postfit, prefit=options.prefit, \
             interactive=options.interactive, \
             mark_peri=options.mark_peri, show_legend=options.legend)
+    fig.set_visible(True)
+    redrawplot()
+
+def redrawplot():
+    plt.draw()
 
 
 def quit():
@@ -346,17 +359,48 @@ def pick(event):
         print "Multiple TOAs selected. Zoom in and try again."
 
 
+def print_help():
+    # Display help
+    print "Helping..."
+    print "-"*80
+    print "Help - Hotkeys definitions:"
+    print "\th - Display this help"
+    print "\tq - Quit"
+    print "\ts - Save current plot(s) to PostScript file"
+    print "\tp - Toggle prefit display on/off"
+    print "\tP - Toggle postfit display on/off"
+    print "\tz - Toggle Zoom-mode on/off"
+    print "\tL - Toggle legend on/off"
+    print "\to - Go to original view"
+    print "\t< - Go to previous view"
+    print "\t> - Go to next view"
+    print "\tx - Set x-axis limits (terminal input required)"
+    print "\ty - Sey y-axis limits (terminal input required)"
+    print "\tr - Reload residuals"
+    print "\tspace - Cycle through x-axis types ('MJD', 'year', 'numTOA', 'orbitphase')"
+    print "\tt     - Cycle through x-axis types ('phase', 'usec', 'sec')"
+    print "\t[Left mouse] - Select TOA (display info in terminal)"
+    print "\t             - Select zoom region (if Zoom-mode is on)"
+    print "-"*80
+
+
 def keypress(event):
     global tempo_results
     global options
+    global xind, xvals
+    global yind, yvals
     if type(event.key) == types.StringType:
-        
         if event.key.lower() == 'q':
             quit()
         elif event.key.lower() == 's':
             savefigure()
-        elif event.key == ' ':
+        elif event.key.lower() == 'r':
             reloadplot()
+        elif event.key.upper() == 'L':
+            leg = plt.gcf().legends[0]
+            options.legend = not options.legend
+            leg.set_visible(options.legend)
+            redrawplot()
         elif event.key.lower() == 'z':
             # Turn on zoom mode
             print "Toggling zoom mode..."
@@ -373,6 +417,26 @@ def keypress(event):
             # Go forward to next plot view
             print "Going forward..."
             event.canvas.toolbar.forward()
+        elif event.key.lower() == ' ':
+            xind = (xind + 1) % len(xvals)
+            print "Toggling plot type...[%s]"%xvals[xind], xind
+            options.xaxis = xvals[xind]
+            reloadplot()
+        elif event.key.lower() == 't':
+            yind = (yind + 1) % len(yvals)
+            print "Toggling plot scale...[%s]"%yvals[yind], yind
+            options.yaxis = yvals[yind]
+            reloadplot()
+        elif event.key == 'p':
+            options.prefit = not options.prefit
+            print "Toggling prefit-residuals display to: %s" % \
+                    ((options.prefit and "ON") or "OFF")
+            reloadplot()
+        elif event.key == 'P':
+            options.postfit = not options.postfit
+            print "Toggling postfit-residuals display to: %s" % \
+                    ((options.postfit and "ON") or "OFF")
+            reloadplot()
         elif event.key.lower() == 'x':
             # Set x-axis limits
             print "Setting x-axis limits. User input required..."
@@ -410,70 +474,29 @@ def keypress(event):
                 print "Bad values provided!"
                 return
             plt.ylim(ymin, ymax)
-        elif event.key.lower() == 'u':
-            # Change plot units
-            changed = False
-            print "Setting units. User input required..."
-            axis = raw_input("Which axis (x/y)? ")
-            if axis in ('x', 'X'):
-                xunits = raw_input("Units for X-axis " \
-                                    "(numtoa/mjd/year/orbitphase): ")
-                if xunits.lower() in ('numtoa', 'mjd', 'year', 'orbitphase'):
-                    changed = (xunits != options.xaxis)
-                    options.xaxis = xunits
-                    print "X-axis units set to %s" % xunits
-                else:
-                    print "Unrecognized units for X-axis (%s)!" % xunits
-            elif axis in ('y', 'Y'):
-                yunits = raw_input("Units for Y-axis (usec/phase/sec): ")
-                if yunits.lower() in ('usec', 'phase', 'sec'):
-                    changed = (yunits != options.yaxis)
-                    options.yaxis = yunits
-                    print "Y-axis units set to %s" % yunits
-                else:
-                    print "Unrecognized units for Y-axis (%s)!" % yunits
-            else:
-                print "Unreconized axis choice (%s)!" % axis
-            if changed:
-                reloadplot()
-        elif event.key == 'h':
-            # Display help
-            print "Helping..."
-            print "-"*80
-            print "Help - Hotkeys definitions:"
-            print "\th - Display this help"
-            print "\tq - Quit"
-            print "\ts - Save current plot(s) to PostScript file"
-            print "\tz - Toggle Zoom-mode on/off"
-            print "\to - Go to original view"
-            print "\t< - Go to previous view"
-            print "\t> - Go to next view"
-            print "\tx - Set x-axis limits (terminal input required)"
-            print "\ty - Sey y-axis limits (terminal input required)"
-            print "\tu - Set units (terminal input required)"
-            print "\t[Spacebar] - Reload plot"
-            print "\t[Left mouse] - Select TOA (display info in terminal)"
-            print "\t             - Select zoom region (if Zoom-mode is on)"
-            print "-"*80
-            
+        elif event.key.lower() == 'h':
+            print_help() 
 
 def mjd_to_year(mjds):
-    mjds = np.asarray(mjds)
-    old_shape = mjds.shape # Remember original shape
-    mjds.shape = (mjds.size, 1)
-    years, months, days, fracs, stats = np.apply_along_axis(slalib.sla_djcl, 1, mjds).transpose()
-    # Take into account leap years
-    daysperyear = (((years % 4) == 0) & (((years % 100) != 0) | ((years % 400) == 0))) * 1 + 365.0
-    years, days, stats = np.array([slalib.sla_clyd(*ymd) for ymd in np.vstack((years, months, days)).transpose()]).transpose()
-    mjds.shape = old_shape # Change back to original shape
-    return (years + (days + fracs) / daysperyear)
+    import astro_utils.calendar as calendar
+    y,m,d = calendar.MJD_to_date(mjds)
+    frac = calendar.fraction_of_year(y,m,d)
+    return y+frac
 
 
 def parse_options():
     (options, sys.argv) = parser.parse_args()
-    
+    if sys.argv==[]:
+        sys.argv = ['pyplotres.py']
     if not options.freqs:
-        freqbands = [['0', 'inf']]
+        # Default frequency bands
+        freqbands = [['0', '400'],
+                     ['400', '600'],
+                     ['600', '1000'],
+                     ['1000', '1600'],
+                     ['1600', '2400'],
+                     ['2400', 'inf']]
+        #freqbands = [['0', 'inf']]
     else:
         freqbands = []
         for fopt in options.freqs:
@@ -500,10 +523,10 @@ def parse_options():
         # show postfit
         options.postfit = True
    
-    if options.xaxis.lower() not in ['numtoa', 'mjd', 'orbitphase', 'year']:
+    if options.xaxis.lower() not in xvals:
         raise BadOptionValueError("Option to -x/--x-axis (%s) is not permitted." % \
                             options.xaxis)
-    if options.yaxis.lower() not in ['phase', 'usec', 'sec']:
+    if options.yaxis.lower() not in yvals:
         raise BadOptionValueError("Option to -y/--y-axis (%s) is not permitted." % \
                             options.yaxis)
     return options
@@ -548,13 +571,12 @@ if __name__=='__main__':
                         default=[])
     parser.add_option('-x', '--x-axis', dest='xaxis', type='string', \
                         help="Values to plot on x-axis. Must be one of " \
-                             "{'numTOA', 'MJD', 'orbitphase', 'year'}. " \
-                             "(Default: 'MJD')", 
-                        default='MJD')
+                             "%s. (Default: '%s')" % (str(xvals), xvals[xind]), 
+                        default=xvals[xind])
     parser.add_option('-y', '--y-axis', dest='yaxis', type='string', \
                         help="Values to plot on y-axis. Must be one of "
-                             "{'phase', 'usec', 'sec'}. (Default: 'phase')", \
-                        default='phase')
+                             "%s. (Default: '%s')" % (str(yvals), yvals[yind]), \
+                        default=yvals[yind])
     parser.add_option('--post', dest='postfit', action='store_true', \
                         help="Show postfit residuals. (Default: Don't show " \
                              "postfit.)", \
