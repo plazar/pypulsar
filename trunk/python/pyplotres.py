@@ -85,6 +85,37 @@ class TempoResults:
                         r.uncertainty[indices], r.weight[indices], \
                         self.inpar, self.outpar)
 
+    def get_info(self, freq_label, index, postfit=True):
+        """Given a freq_label and index return formatted text
+            describing the TOA residual.
+
+            Assume postfit period for calculating residual in phase, 
+            unless otherwise indicated.
+        """
+        r = self.residuals[freq_label]
+        description = []
+        description.append("TOA Selected:")
+        description.append("\tNumber: %s" % r.TOA_index[index][0])
+        description.append("\tEpoch (MJD): %s" % r.bary_TOA[index][0])
+        if yvals[yind] == "phase":
+            description.append("\tPre-fit residual (phase): %s" % r.prefit_phs[index][0])
+            description.append("\tPost-fit residual (phase): %s" % r.postfit_phs[index][0])
+            if postfit:
+                description.append("\tUncertainty (phase): %s" % (r.uncertainty[index][0]/r.outpar.P0))
+            else:
+                description.append("\tUncertainty (phase): %s" % (r.uncertainty[index][0]/r.inpar.P0))
+        elif yvals[yind] == "usec":
+            description.append("\tPre-fit residual (usec): %s" % (r.prefit_sec[index][0]*1e6))
+            description.append("\tPost-fit residual (usec): %s" % (r.postfit_sec[index][0]*1e6))
+            description.append("\tUncertainty (usec): %s" % (r.uncertainty[index][0]*1e6))
+        elif yvals[yind] == "sec":
+            description.append("\tPre-fit residual (sec): %s" % r.prefit_sec[index][0])
+            description.append("\tPost-fit residual (sec): %s" % r.postfit_sec[index][0])
+            description.append("\tUncertainty (sec): %s" % r.uncertainty[index][0])
+        description.append("\tFrequency (MHz): %s" % r.bary_freq[index][0])
+        return description
+
+
 
 class Resids:
     """The Resids object contains the following information
@@ -201,7 +232,7 @@ def plot_data(tempo_results, xkey, ykey, postfit=True, prefit=False, \
     elif not postfit and prefit:
         to_plot_postfit = [False]
     else:
-        raise ValueError("At least one of prefit and postfit must be True.")
+        raise EmptyPlotValueError("At least one of prefit and postfit must be True.")
     subplot = 1
     numsubplots = len(to_plot_postfit)
     global axes
@@ -302,17 +333,27 @@ def savefigure(savefn='./resid2.tmp.ps'):
 
 def reloadplot():
     # Reload residuals and replot
-    print "Reloading..."
+    print "Plotting..."
     fig = plt.gcf()
     fig.set_visible(False)
     plt.clf() # clear figure
     tempo_results = TempoResults(options.freqbands)
-    plot_data(tempo_results, options.xaxis, options.yaxis, 
-            postfit=options.postfit, prefit=options.prefit, \
-            interactive=options.interactive, \
-            mark_peri=options.mark_peri, show_legend=options.legend)
+    try:
+        plot_data(tempo_results, options.xaxis, options.yaxis, 
+                postfit=options.postfit, prefit=options.prefit, \
+                interactive=options.interactive, \
+                mark_peri=options.mark_peri, show_legend=options.legend)
+    except EmptyPlotValueError, msg:
+        print msg
+        print "Press 'p'/'P' to add prefit/postfit plot."
+        plt.figtext(0.5, 0.5, (str(msg) + "\n" + \
+                        "Press 'p'/'P' to add prefit/postfit plot."), \
+                    horizontalalignment='center', \
+                    verticalalignment='center', \
+                    bbox=dict(facecolor='white', alpha=0.75))
     fig.set_visible(True)
     redrawplot()
+
 
 def redrawplot():
     plt.draw()
@@ -326,37 +367,21 @@ def quit():
 def pick(event):
     global tempo_results
     index = event.ind
-    if event.mouseevent.inaxes:
-        ylabel = event.mouseevent.inaxes.get_ylabel()
-        title = event.mouseevent.inaxes.get_title()
+    axes = event.mouseevent.inaxes
+    if axes:
+        title = axes.get_title()
+        postfit = ("Postfit" in title)
     if len(index) == 1:
         freq_label = event.artist.get_label()
-        r = tempo_results.residuals[freq_label]
-        print "TOA Selected:"
-        print "\tNumber:", r.TOA_index[index][0]
-        print "\tEpoch (MJD):", r.bary_TOA[index][0]
-        if "(Phase)" in ylabel:
-            print "\tPre-fit residual (phase):", r.prefit_phs[index][0]
-            print "\tPost-fit residual (phase):", r.postfit_phs[index][0]
-            if "Prefit" in title:
-                print "\tUncertainty (phase):", r.uncertainty[index][0]/r.inpar.P0
-            elif "Postfit" in title:
-                print "\tUncertainty (phase):", r.uncertainty[index][0]/r.outpar.P0
-            else:
-                raise ValueError("Cannot determine pre/post-fit from title (%s)" % title)
-        elif "(uSeconds)" in ylabel:
-            print "\tPre-fit residual (usec):", r.prefit_sec[index][0]*1e6
-            print "\tPost-fit residual (usec):", r.postfit_sec[index][0]*1e6
-            print "\tUncertainty (usec):", r.uncertainty[index][0]*1e6
-        elif "(Seconds)" in ylabel:
-            print "\tPre-fit residual (sec):", r.prefit_sec[index][0]
-            print "\tPost-fit residual (sec):", r.postfit_sec[index][0]
-            print "\tUncertainty (sec):", r.uncertainty[index][0]
-        else:
-            raise ValueError("Unknown unit for y-axes (%s)" % ylabel)
-        print "\tFrequency (MHz):", r.bary_freq[index][0]
+        info = tempo_results.get_info(freq_label, index, postfit)
+        print_text(info)
     else:
         print "Multiple TOAs selected. Zoom in and try again."
+
+
+def print_text(lines, *args, **kwargs):
+    """Print lines of text (in a list) in the terminal."""
+    print '\n'.join(lines)
 
 
 def print_help():
@@ -377,8 +402,8 @@ def print_help():
     print "\tx - Set x-axis limits (terminal input required)"
     print "\ty - Sey y-axis limits (terminal input required)"
     print "\tr - Reload residuals"
-    print "\tspace - Cycle through x-axis types ('MJD', 'year', 'numTOA', 'orbitphase')"
-    print "\tt     - Cycle through x-axis types ('phase', 'usec', 'sec')"
+    print "\tt - Cycle through y-axis types ('phase', 'usec', 'sec')"
+    print "\t[Space] - Cycle through x-axis types ('MJD', 'year', 'numTOA', 'orbitphase')"
     print "\t[Left mouse] - Select TOA (display info in terminal)"
     print "\t             - Select zoom region (if Zoom-mode is on)"
     print "-"*80
@@ -477,11 +502,19 @@ def keypress(event):
         elif event.key.lower() == 'h':
             print_help() 
 
+
 def mjd_to_year(mjds):
-    import astro_utils.calendar as calendar
-    y,m,d = calendar.MJD_to_date(mjds)
-    frac = calendar.fraction_of_year(y,m,d)
-    return y+frac
+    mjds = np.asarray(mjds)
+    if mjds.size < 1:
+        return mjds
+    old_shape = mjds.shape # Remember original shape
+    mjds.shape = (mjds.size, 1)
+    years, months, days, fracs, stats = np.apply_along_axis(slalib.sla_djcl, 1, mjds).transpose()
+    # Take into account leap years
+    daysperyear = (((years % 4) == 0) & (((years % 100) != 0) | ((years % 400) == 0))) * 1 + 365.0
+    years, days, stats = np.array([slalib.sla_clyd(*ymd) for ymd in np.vstack((years, months, days)).transpose()]).transpose()
+    mjds.shape = old_shape # Change back to original shape
+    return (years + (days + fracs) / daysperyear)
 
 
 def parse_options():
@@ -541,10 +574,19 @@ def main():
     reloadplot()
 
     if options.interactive:
-        # Register event callbacks function and show the plot
         fig = plt.gcf() # current figure
+        
+        # Before setting up our own event handlers delete matplotlib's
+        # default 'key_press_event' handler.
+        defcids = fig.canvas.callbacks.callbacks['key_press_event'].keys()
+        for cid in defcids:
+            fig.canvas.callbacks.disconnect(cid)
+        
+        # Now, register our event callback functions
         cid_keypress = fig.canvas.mpl_connect('key_press_event', keypress)
         cid_pick = fig.canvas.mpl_connect('pick_event', pick)
+
+        # Finally, let the show begin!
         plt.ion()
         plt.show()
     else:
@@ -559,9 +601,15 @@ class BadOptionValueError(ValueError):
     pass
 
 
+class EmptyPlotValueError(ValueError):
+    """Empty plot.
+    """
+    pass
+
+
 if __name__=='__main__':
     parser = optparse.OptionParser(prog="pyplotres.py", \
-                        version="v1.1 Patrick Lazarus (Mar. 13, 2010)")
+                        version="v1.2 Patrick Lazarus (Mar. 29, 2010)")
     parser.add_option('-f', '--freq', dest='freqs', action='append', \
                         help="Band of frequencies, in MHz, to be plotted " \
                              "(format xxx:yyy). Each band will have a " \
