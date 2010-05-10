@@ -65,6 +65,14 @@ def main():
         mjdi = int(mjd) # integer part of mjd
         mjdf = mjd-mjdi # fractional part of mjd
         phase, freq = polycos.get_phs_and_freq(mjdi, mjdf)
+        if options.on_pulse_regions == [] or options.on_pulse_regions is None:
+            # Use polycos to determine on-pulse region
+            fidphase = 1.0-phase # phase of fiducial point in profile
+            if fidphase>=0.9 or fidphase<=0.1:
+                # Shift start of observation by 0.25 in phase
+                options.shift_phase = phase + 0.25
+                fidphase = (fidphase - 0.25) % 1.0
+            options.on_pulse_regions = [(fidphase-0.1, fidphase+0.1)]
         if options.debug:
             colour.cprint("MJD at start of file: %r" % mjd, 'debug')
             colour.cprint("Phase at start of file: %f" % phase, 'debug')
@@ -86,6 +94,14 @@ def main():
         mjdi = int(mjd) # integer part of mjd
         mjdf = mjd-mjdi # fractional part of mjd
         phase, freq = polycos.get_phs_and_freq(mjdi, mjdf)
+        if options.on_pulse_regions == [] or options.on_pulse_regions is None:
+            # Use polycos to determine on-pulse region
+            fidphase = 1.0-phase # phase of fiducial point in profile
+            if fidphase>=0.9 or fidphase<=0.1:
+                # Shift start of observation by 0.25 in phase
+                options.shift_phase = phase + 0.25
+                fidphase = (fidphase - 0.25) % 1.0
+            options.on_pulse_regions = [(fidphase-0.1, fidphase+0.1)]
         if options.debug:
             colour.cprint("MJD at start of file: %r" % mjd, 'debug')
             colour.cprint("Phase at start of file: %f" % phase, 'debug')
@@ -117,6 +133,7 @@ def main():
     # Loop over pulses in timeseries. Examine pulses one at a time.
     good_pulses = []
     snrs = []
+    widths = []
     notes = []
     nummasked = 0
     numpulses = 0
@@ -141,11 +158,13 @@ def main():
                         # First time snr is above threshold
                         snrs.append(snr)
                         notes.append("smoothed by %3d bins" % numbins)
+                        widths.append(numbins)
                         good_pulses.append(current_pulse)
                     else:
                         # Better smootfactor/snr found, update, but don't
                         # add pulse to good_pulses again.
                         snrs[-1] = snr
+                        widths[-1] = numbins
                         notes[-1] = "smoothed by %3d bins" % numbins
                     maxsnr = snr
                     bestfactor = numbins
@@ -158,7 +177,8 @@ def main():
             write_pulses(good_pulses, timeseries)
         if options.create_plot_files:
             print "Creating pulse plots..."
-            plot_pulses(good_pulses, timeseries, options.downfactor)
+            plot_pulses(good_pulses, timeseries, options.downfactor, 
+                            widths=widths)
         if options.create_joydiv_plot:
             print "Making JoyDiv plot..."
             joy_division_plot(good_pulses, timeseries, options.downfactor, \
@@ -377,12 +397,18 @@ def print_report(pulses, numpulses, nummasked, snrs=None, notes=None, \
             sys.stdout.write("\n")
    
 
-def plot_pulses(pulses, timeseries, downfactor=1):
+def plot_pulses(pulses, timeseries, downfactor=1, widths=None):
     """Plot each pulse into a separate file.
         Downsample profiles by factor 'downfactor' before plotting.
     """
-    for pulse in pulses:
-        pulse.plot(os.path.split(timeseries.basefn)[1], downfactor)
+    if widths is not None:
+        for pulse, wid in zip(pulses, widths):
+            pulse.plot(os.path.split(timeseries.basefn)[1], 1, \
+                        smoothfactor=wid, shownotes=True, decorate=True)
+    else:
+        for pulse in pulses:
+            pulse.plot(os.path.split(timeseries.basefn)[1], downfactor, \
+                        shownotes=True, decorate=True)
 
 
 def joy_division_plot(pulses, timeseries, downfactor=1, hgt_mult=1):
@@ -411,11 +437,12 @@ def joy_division_plot(pulses, timeseries, downfactor=1, hgt_mult=1):
     for pulse in pulses:
         vertical_offset = (pulse.number-1)*JOYDIV_SEP
         copy_of_pulse = pulse.make_copy()
-        # Interpolate before downsampling
-        interp = ((copy_of_pulse.N/downfactor)+1)*downfactor
-        copy_of_pulse.interpolate(interp)
-        copy_of_pulse.downsample(downfactor)
-        copy_of_pulse.scale()
+        if downfactor > 1:
+            # Interpolate before downsampling
+            interp = ((copy_of_pulse.N/downfactor)+1)*downfactor
+            copy_of_pulse.interpolate(interp)
+            copy_of_pulse.downsample(downfactor)
+            # copy_of_pulse.scale()
         if first:
             summed_prof = copy_of_pulse.profile.copy()
             first = False

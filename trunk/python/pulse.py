@@ -10,6 +10,8 @@ Patrick Lazarus, June 24, 2009
 import copy
 import os.path
 import types
+import warnings
+
 import numpy as np
 import scipy.signal
 
@@ -20,7 +22,8 @@ import matplotlib.pyplot as plt
 
 class Pulse:
     def __init__(self, number, mjd, time, duration, profile, \
-                    origfn, dt, on_pulse_regions=None):
+                    origfn, dt, dm, telescope, \
+                    lofreq, chan_width, bw, on_pulse_regions=None):
         """Create a pulse object. Arguments provided are:
             - number: The pulse number (Counted from beginning 
                                         of an observation.)
@@ -33,6 +36,11 @@ class Pulse:
                         profile (a slice of a timeseries).
             - origfn: Name of data file the pulse originated from.
             - dt: width of each profile bin (in seconds).
+            - dm: DM of timeseries pulse came from (in cm^-3 pc).
+            - telescope: telescope data were taken with.
+            - lofreq: mid-point of low frequency channel (in MHz)
+            - chan_width: width of channels (in MHz)
+            - bw: total observing bandwidth (in MHz)
             - on_pulse_regions: A list of 2-tuples. Each tuple
                         defines an on-pulse region measured in
                         rotational phase (between 0.0 and 1.0).
@@ -44,6 +52,11 @@ class Pulse:
         self.profile = profile.flatten()
         self.N = profile.size # number of samples in the profile
         self.dt = dt # width of bin (in seconds)
+        self.dm = dm
+        self.telescope = telescope
+        self.lofreq = lofreq
+        self.chan_width = chan_width
+        self.bw = bw
         self.origfn = origfn
         if (type(on_pulse_regions)==types.ListType or \
                 type(on_pulse_regions)==np.ndarray) and len(on_pulse_regions):
@@ -256,7 +269,7 @@ class Pulse:
         # profiles look identical, by eye).
         # downsamp = self.N
         # interp = numsamples * self.N
-        
+        warnings.warn("interp_and_downsamp() may be unreliable")    
         self.interpolate(interp)
         self.downsample(downsamp)
 
@@ -275,12 +288,18 @@ class Pulse:
         # No section of profile is flat.
         return False
 
-    def plot(self, basefn=None, downfactor=1):
+    def plot(self, basefn=None, downfactor=1, smoothfactor=1, \
+                shownotes=False, decorate=False):
         """Plot the pulse profile.
             'basefn' is base filename to use. Default will
             be to use same as original data file's name
             (with the extension).
             Downsample profiles by factor 'downfactor' before plotting.
+            Smooth profile by factor 'smoothfactor' before downsampling.
+            If 'dectorate' is True show average and 1-sigma on plot
+                (avg and std are determined from off-pulse region)
+            If 'shownotes' is True print 'downfactor' and 'smoothfactor' 
+                on plot.
         """
         #
         # Assume original filename has an extension
@@ -289,11 +308,23 @@ class Pulse:
         if basefn is None:
             basefn, extension = os.path.splitext(self.origfn)
         copy_of_self = self.make_copy()
-        # Interpolate before downsampling
-        interp = ((copy_of_self.N/downfactor)+1)*downfactor
-        copy_of_self.interpolate(interp)
-        copy_of_self.downsample(downfactor)
+        if smoothfactor > 1:
+            copy_of_self.smooth(smoothfactor)
+        copy_of_self.scale()
         plt.figure()
+        if decorate:
+           off_pulse = copy_of_self.get_off_pulse()
+           avg = np.mean(off_pulse)
+           std = np.std(off_pulse)
+           max = np.max(copy_of_self.get_on_pulse())
+           plt.axhline(avg, color='k', linestyle='--')
+           plt.axhline(avg+std, color='k', linestyle=':')
+        if shownotes:
+            text = "Smooth factor: %d, Downsample factor: %d, Max SNR: %f" % \
+                        (smoothfactor, downfactor, max) 
+            plt.figtext(0.05, 0.025, text, size='xx-small')
+        if downfactor > 1:
+            copy_of_self.downsample(downfactor)
         plt.plot(copy_of_self.profile, 'k-', lw=0.5)
         plt.xlabel("Profile bin")
         plt.title("Pulse #%d" % self.number)
@@ -321,6 +352,11 @@ class Pulse:
         file.write("# Duration of pulse (seconds)     = %0.15f\n" % self.duration)
         file.write("# Profile bins                    = %d\n" % self.N)
         file.write("# Width of profile bin (seconds)  = %g\n" % self.dt)
+        file.write("# Dispersion Measure (cm^-3 pc)   = %f\n" % self.dm)
+        file.write("# Telescope                       = %s\n" % self.telescope)
+        file.write("# Low frequency mid-channel (MHz) = %0.15f\n" % self.lofreq)
+        file.write("# Channel width (MHz)             = %0.15f\n" % self.chan_width)
+        file.write("# Total bandwidth (MHz)           = %0.15f\n" % self.bw)
         if self.on_pulse is not None:
             for i, (lo,hi) in enumerate(self.on_pulse):
                 file.write("# On-pulse region %2d (phase)      = %f-%f\n" % \
@@ -336,7 +372,9 @@ class Pulse:
         """
         summed_pulse = SummedPulse(self.number, self.mjd, self.time, \
                                 self.duration, self.profile, self.origfn, \
-                                self.dt, self.on_pulse)
+                                self.dt, self.dm, self.telescope, \
+                                self.lofreq, self.chan_width, self.dm, \
+                                self.on_pulse)
         # summed_pulse.scale() ## DEBUG
         return summed_pulse
         
@@ -362,11 +400,13 @@ class SummedPulse(Pulse):
         keeps track of what pulses have been summed.
     """
     def __init__(self, number, mjd, time, duration, profile, \
-                    origfn, dt, on_pulse_regions=None, 
+                    origfn, dt, dm, telescope, lofreq, chan_width, bw, \
+                    on_pulse_regions=None, 
                     init_registry=None, init_count=1):
         # Call superclass' constructor
         Pulse.__init__(self, number, mjd, time, duration, profile, \
-                    origfn, dt, on_pulse_regions)
+                    origfn, dt, dm, telescope, lofreq, chan_width, bw, \
+                    on_pulse_regions)
         # Initialize registry to keep track of what pulses are summed
         if init_registry is not None:
             self.pulse_registry = init_registry
@@ -506,6 +546,16 @@ def read_pulse_from_file(filename):
             duration = float(line.split('=')[-1].strip())
         elif line.startswith("# Width of profile bin (seconds)"):
             dt = float(line.split('=')[-1].strip())
+        elif line.startswith("# Dispersion Measure (cm^-3 pc)"):
+            dm = float(line.split('=')[-1].strip())
+        elif line.startswith("# Telescope"):
+            telescope = line.split('=')[-1].strip()
+        elif line.startswith("# Low frequency mid-channel (MHz)"):
+            lofreq = float(line.split('=')[-1].strip())
+        elif line.startswith("# Channel width (MHz)"):
+            chan_width = float(line.split('=')[-1].strip())
+        elif line.startswith("# Total bandwidth (MHz)"):
+            bw = float(line.split('=')[-1].strip())
         elif line.startswith("# On-pulse region"):
             lo = float(line.split('=')[-1].split('-')[0].strip())
             hi = float(line.split('=')[-1].split('-')[1].strip())
@@ -516,7 +566,8 @@ def read_pulse_from_file(filename):
             # Profile value
             profile.append(float(line.split()[-1].strip()))
     return Pulse(number, mjd, time, duration, np.array(profile), \
-                    origfn, dt, on_pulse_regions)
+                    origfn, dt, dm, telescope, \
+                    lofreq, chan_width, bw, on_pulse_regions)
 
 
 class OnPulseRegionError(Exception):

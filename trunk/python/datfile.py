@@ -144,7 +144,11 @@ class Datfile:
             yield pulse.Pulse(number=pulse_number, mjd=current_mjd, \
                               time=current_time, duration=current_period, \
                               profile=current_pulse, origfn=self.datfn, \
-                              dt=self.infdata.dt)
+                              dt=self.infdata.dt, dm=self.infdata.DM, \
+                              telescope=self.infdata.telescope, \
+                              lofreq=self.infdata.lofreq, \
+                              chan_width=self.infdata.chan_width, \
+                              bw = self.infdata.BW)
             # Update pulse number, mjd, period and pulse
             pulse_number += 1
             current_time = self.currtime_actual
