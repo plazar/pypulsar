@@ -26,19 +26,19 @@ import matplotlib.cm
 import numpy as np
 import scipy.signal
 
-import filterbank
+import fbobs
 import psr_utils
 import rfifind
 
 
 def main():
-    filfn = args[0] # addtional argument is fileterbank file
+    filfns = args # addtional argument is fileterbank files
     if options.debug:
-        print "Input filterbank file:", filfn
+        print "Input filterbank files:", filfns
 
-    filfile = filterbank.filterbank(filfn)
+    obs = fbobs.fbobs(filfns)
     # filfile.print_header()
-    obslen = filfile.number_of_samples*filfile.header['tsamp']
+    obslen = obs.obslen 
 
     # Determine start and end of interval (in seconds and samples)
     if options.start < 0:
@@ -47,13 +47,13 @@ def main():
         # set to end of filterbank file
         options.end = obslen
 
-    reqstartsamp = int(options.start / filfile.header['tsamp']) # requested
+    reqstartsamp = int(options.start / obs.tsamp) # requested
     # Round down to a multiple of downsamp bins
     reqstartsamp = reqstartsamp - (reqstartsamp % options.downsamp)
     # Get extra bins for smoothing
     startsamp = reqstartsamp - options.width*options.downsamp
 
-    reqendsamp = int(options.end / filfile.header['tsamp']) # requested
+    reqendsamp = int(options.end / obs.tsamp) # requested
     # Round up to a multiple of downsamp bins
     reqendsamp = reqendsamp - (reqendsamp % options.downsamp) + options.downsamp
     # Get extra bins for smoothing
@@ -61,9 +61,9 @@ def main():
     if options.dm:
         # Get extra bins for dedispersion
         # Compute DM delays
-        delay_seconds = psr_utils.delay_from_DM(options.dm, filfile.frequencies)
+        delay_seconds = psr_utils.delay_from_DM(options.dm, obs.frequencies)
         delay_seconds -= np.min(delay_seconds)
-        delay_samples = delay_seconds/(options.downsamp*filfile.header['tsamp'])
+        delay_samples = delay_seconds/(options.downsamp*obs.tsamp)
         maxsamps = np.max(delay_samples*options.downsamp)
         maxsamps = int(np.round(float(maxsamps)/options.downsamp))*options.downsamp
         endsamp += maxsamps
@@ -75,18 +75,16 @@ def main():
         print "Requested start time: %s s (%d samples)" % \
                     (options.start, reqstartsamp)
         print "Actual start time: %s s (%d samples)" % \
-                    (startsamp*filfile.header['tsamp'], startsamp)
+                    (startsamp*obs.tsamp, startsamp)
         print "Requested end time: %s s (%d samples)" % \
                     (options.end, reqendsamp)
         print "Actual end time: %s s (%d samples)" % \
-                    (endsamp*filfile.header['tsamp'], endsamp)
+                    (endsamp*obs.tsamp, endsamp)
 
-    # Seek to start time
-    filfile.seek_to_sample(startsamp)
     # read data
-    data = filfile.read_Nsamples(numsamps).astype('float32')
-    filfile.close()
-    data.shape = (numsamps, filfile.header['nchans'])
+    data = obs.get_sample_interval(startsamp, endsamp).astype('float32')
+    obs.close_all()
+    data.shape = (numsamps, obs.nchans)
    
     if options.mask is not None:
         if options.debug:
@@ -94,7 +92,7 @@ def main():
         # Mask channels
         mask = rfifind.rfifind(options.mask)
         maskchans = mask.mask_zap_chans
-        maskchans = filfile.header['nchans'] - 1 - np.array(list(maskchans))
+        maskchans = obs.nchans - 1 - np.array(list(maskchans))
         data = mask_channels(data, maskchans)
 
     # Modify data
@@ -118,10 +116,10 @@ def main():
     plt.imshow(data_scaled.transpose(), \
                     aspect='auto', cmap=matplotlib.cm.binary, interpolation='nearest', \
                     extent=(startsamp/options.downsamp, endsamp/options.downsamp, \
-                                filfile.frequencies[-1], filfile.frequencies[0]))
+                                obs.frequencies[-1], obs.frequencies[0]))
     plt.xlabel("Sample")
     plt.ylabel("Observing frequency (MHz)")
-    plt.suptitle(os.path.split(filfile.filename)[1])
+    plt.suptitle("Frequency vs. Time")
     fig.text(0.05, 0.02, r"Start time: $\sim$ %s s, End time: $\sim$ %s s, " \
                 "Downsampled: %d bins, Smoothed: %d bins" % \
                 (options.start, options.end, options.downsamp, options.width), \
@@ -131,7 +129,7 @@ def main():
         ylim = plt.ylim()
         
         # Plot dispersion delay trace
-        plt.plot(startsamp/options.downsamp+delay_samples, filfile.frequencies, \
+        plt.plot(startsamp/options.downsamp+delay_samples, obs.frequencies, \
                     'r-', lw=5, alpha=0.25)
         plt.xlim(xlim)
         plt.ylim(ylim)
