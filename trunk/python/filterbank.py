@@ -16,9 +16,7 @@ import sigproc
 class filterbank:
     def __init__(self, filfn):
         if not os.path.isfile(filfn):
-            print "ERROR: File does not exist!\n\t(%s)" % filfn
-            self = None
-            return
+            raise ValueError("ERROR: File does not exist!\n\t(%s)" % filfn)
         else:
             self.filename = filfn
             self.already_read_header = False
@@ -30,6 +28,7 @@ class filterbank:
             self.dtype = None
             self.filfile = open(filfn, 'rb')
             self.read_header()
+            self.compute_frequencies()
 
     def close(self):
         self.filfile.close()
@@ -61,6 +60,24 @@ class filterbank:
             if self.data_size % bytes_per_sample:
                 warnings.warn("Not an integer number of samples in file.")
             self.number_of_samples = self.data_size / bytes_per_sample
+
+    def print_header(self):
+        """Print header parameters and values.
+        """
+        self.read_header()
+        for param in self.header_params:
+            print "%s: %s" % (param, self.header[param])
+
+    def compute_frequencies(self):
+        """Compute frequencies (in MHz) and store in 
+            attribute self.frequencies.
+
+            NOTE: frequencies correspond to order of channels
+                    in filterbank file.
+        """
+        self.read_header()
+        self.frequencies = self.header['fch1'] + \
+                            self.header['foff']*np.arange(self.header['nchans'])
 
     def read_sample(self):
         """
