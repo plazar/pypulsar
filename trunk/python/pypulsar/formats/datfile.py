@@ -32,7 +32,11 @@ class Datfile:
         # initialize file, and current sample, time, and MJD counters
         self.rewind()
 
-        
+    def close(self):
+        """Close .dat file.
+        """
+        self.datfile.close()
+
     def __str__(self):
         string_repr = "%s:\n" % self.origfn
         string_repr += "\tCurrent sample: %d\n" % self.currsample
@@ -94,6 +98,14 @@ class Datfile:
         if data is not None:
             self.__update_desired_time(T)
         return data
+
+
+    def read_all(self):
+        """Read all samples in datfile and return a numpy array of the data.
+            File is rewound before reading.
+        """
+        self.rewind()
+        return self.__read(self.infdata.N)
 
 
     def rewind(self):
