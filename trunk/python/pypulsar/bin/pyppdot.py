@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 
-# An interactive P-Pdot diagram plotter written in python
-# using matplotlib and numpy
-#
-#           Patrick Lazarus, Sept 13th, 2009
+"""
+An interactive P-Pdot diagram plotter written in python
+using matplotlib and numpy
+
+          Patrick Lazarus, Sept 13th, 2009
+"""
 
 import optparse
 import sys
@@ -17,7 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import psr_utils
-import colour
+from pypulsar.utils import colour
 
 MARKER_OPTIONS = {'facecolor':'none', 'zorder':2, 'alpha':0.8, 'lw':2, 's':50} 
 BINARY_MARKER = {'marker':'o', 'edgecolor':'g', 'label':'binary'}
@@ -206,7 +208,7 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
                         if x.p is not None and x.pdot is not None])
     
     ax = plt.axes()
-    scatt_psrs = ax.scatter(np.log10(periods), np.log10(pdots), c='k', s=6, \
+    scatt_psrs = ax.scatter(periods, pdots, c='k', s=6, \
                             label='pulsars', picker=PICKER, zorder=0)
 
     # Pulsars to highlight
@@ -216,7 +218,7 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
                             if h.p is not None and h.pdot is not None])
         pdots_hl = np.array([h.pdot for h in highlight \
                             if h.p is not None and h.pdot is not None])
-        scatt_psrs_hl = ax.scatter(np.log10(periods_hl), np.log10(pdots_hl), \
+        scatt_psrs_hl = ax.scatter(periods_hl, pdots_hl, \
                                     c='r', s=50, label='highlight', picker=PICKER, \
                                     marker=(5,1,0), edgecolors='r', zorder=1)
         numhl = periods_hl.size
@@ -232,7 +234,7 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
     if periods_bnry.size:
         scatter_options = MARKER_OPTIONS.copy()
         scatter_options.update(BINARY_MARKER)
-        scatt_binaries = ax.scatter(np.log10(periods_bnry), np.log10(pdots_bnry), \
+        scatt_binaries = ax.scatter(periods_bnry, pdots_bnry, \
                                     **scatter_options)
         if not binaries:
             # Hide binaries for now
@@ -251,7 +253,7 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
     if periods_rrat.size:
         scatter_options = MARKER_OPTIONS.copy()
         scatter_options.update(RRAT_MARKER)
-        scatt_rrats = ax.scatter(np.log10(periods_rrat), np.log10(pdots_rrat), \
+        scatt_rrats = ax.scatter(periods_rrat, pdots_rrat, \
                                     **scatter_options)
         if not rrats:
             # Hide RRATs for now
@@ -270,7 +272,7 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
     if periods_mag.size:
         scatter_options = MARKER_OPTIONS.copy()
         scatter_options.update(MAGNETAR_MARKER)
-        scatt_magnetars = ax.scatter(np.log10(periods_mag), np.log10(pdots_mag), \
+        scatt_magnetars = ax.scatter(periods_mag, pdots_mag, \
                                     **scatter_options)
         if not magnetars:
             # Hide magnetars for now
@@ -289,7 +291,7 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
     if periods_sgr.size:
         scatter_options = MARKER_OPTIONS.copy()
         scatter_options.update(SGR_MARKER)
-        scatt_sgr = ax.scatter(np.log10(periods_sgr), np.log10(pdots_sgr), \
+        scatt_sgr = ax.scatter(periods_sgr, pdots_sgr, \
                                     **scatter_options)
         if not sgr:
             # Hide sgr for now
@@ -308,7 +310,7 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
     if periods_axp.size:
         scatter_options = MARKER_OPTIONS.copy()
         scatter_options.update(AXP_MARKER)
-        scatt_axp = ax.scatter(np.log10(periods_axp), np.log10(pdots_axp), \
+        scatt_axp = ax.scatter(periods_axp, pdots_axp, \
                                     **scatter_options)
         if not axp:
             # Hide axp for now
@@ -327,7 +329,7 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
     if periods_snr.size:
         scatter_options = MARKER_OPTIONS.copy()
         scatter_options.update(SNR_MARKER)
-        scatt_snrs = ax.scatter(np.log10(periods_snr), np.log10(pdots_snr), \
+        scatt_snrs = ax.scatter(periods_snr, pdots_snr, \
                                     **scatter_options)
         if not snrs:
             # Hide SNRs for now
@@ -335,11 +337,13 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
     else:
         scatt_snrs = None
 
-    plt.xlabel("log Period")
-    plt.ylabel(r"log $\mathsf{\dot P}$")
+    plt.xlabel("Period (s)")
+    plt.ylabel(r"$\mathsf{\dot P}$ (s/s)")
     plt.title(r"$\mathsf{P-\dot P}$ Diagram")
-    plt.xlim(np.log10((0.001, 100)))
-    plt.ylim(np.log10((10**-22, 10**-8)))
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.xlim((0.001, 100))
+    plt.ylim((10**-22, 10**-8))
     draw_lines(bsurfs, edots, ages)
 
     print "Plot Inventory:"
@@ -355,14 +359,14 @@ def draw_lines(bfields=[], edots=[], ages=[], label=False):
     """
     plimits = plt.xlim()
     pdotlimits = plt.ylim()
-    periods = np.linspace(plimits[0], plimits[1], 100)
-    pdots = np.linspace(pdotlimits[0], pdotlimits[1], 100)
+    periods = np.logspace(np.log10(plimits[0]), np.log10(plimits[1]), 100)
+    pdots = np.logspace(np.log10(pdotlimits[0]), np.log10(pdotlimits[1]), 100)
     bfield_vals = np.zeros((periods.size, pdots.size))
     edot_vals = np.zeros((periods.size, pdots.size))
     age_vals = np.zeros((periods.size, pdots.size))
     for i in np.arange(periods.size):
         for j in np.arange(pdots.size):
-            f, fdot = psr_utils.p_to_f(10**periods[i], 10**pdots[j])
+            f, fdot = psr_utils.p_to_f(periods[i], pdots[j])
             # For some reason the transpose is expected by 'contour'...
             bfield_vals[j][i] = psr_utils.pulsar_B(f, fdot)
             edot_vals[j][i] = psr_utils.pulsar_edot(f, fdot)
@@ -388,7 +392,7 @@ def quit():
     sys.exit(0)
 
 
-def savefigure(savefn='./ppdot.ps'):
+def savefigure(savefn='./ppdot.png'):
     print "Saving plot to %s" % savefn
     plt.savefig(savefn, orientation='landscape', papertype='letter')
 
@@ -397,8 +401,8 @@ def mousepress(event):
     """Event handler for MouseEvent ('button_press_event').
     """
     if event.inaxes and event.button == 2:
-        p = 10**(event.xdata)
-        pdot = 10**(event.ydata)
+        p = event.xdata
+        pdot = event.ydata
         bfield, age, edot = params_from_ppdot(p, pdot)
         print "Coordinates:"
         print "\tPeriod (s): %g, P-dot (s/s): %g" % (p, pdot)
@@ -560,6 +564,12 @@ def create_plot(pulsars, highlight=[], interactive=True, **kwargs):
     plot_data(pulsars, highlight, **kwargs)
     
     if interactive:
+        # Before setting up our own event handlers delete matplotlib's
+        # default 'key_press_event' handler.
+        defcids = fig.canvas.callbacks.callbacks['key_press_event'].keys()
+        for cid in defcids:
+            fig.canvas.callbacks.disconnect(cid)
+        
         # Register event callbacks function and show the plot
         cid_keypress = fig.canvas.mpl_connect('key_press_event', keypress)
         cid_mousepress = fig.canvas.mpl_connect('button_press_event', mousepress)
