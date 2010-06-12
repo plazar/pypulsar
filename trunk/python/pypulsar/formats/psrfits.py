@@ -14,7 +14,7 @@ import slalib
 import pyfits
 import numpy as np
 import psr_utils
-import astro_utils
+from pypulsar.utils.astro import protractor
 
 # Regular expression for parsing DATE-OBS card's format.
 date_obs_re = re.compile(r"^(?P<year>[0-9]{4})-(?P<month>[0-9]{2})-" \
@@ -258,8 +258,8 @@ class SpectraInfo:
 
         # Finished looping through PSRFITS files. Finalise a few things.
         # Convert the position strings into degrees        
-        self.ra2000 = astro_utils.protractor.convert(self.ra_str, 'hmsstr', 'deg')
-        self.dec2000 = astro_utils.protractor.convert(self.dec_str, 'dmsstr', 'deg')
+        self.ra2000 = protractor.convert(self.ra_str, 'hmsstr', 'deg')
+        self.dec2000 = protractor.convert(self.dec_str, 'dmsstr', 'deg')
         
         # Are the polarisations summed?
         if (self.poln_order=="AA+BB") or (self.poln_order=="INTEN"):

@@ -11,7 +11,7 @@ import warnings
 import copy
 import numpy as np
 import psr_utils
-import datfile
+from pypulsar.formats import datfile
 
 
 def sort_by_mjd(datfiles):
