@@ -26,7 +26,7 @@ import matplotlib.cm
 import numpy as np
 import scipy.signal
 
-import fbobs
+from pypulsar.formats import fbobs
 import psr_utils
 import rfifind
 
@@ -134,11 +134,11 @@ def main():
         plt.xlim(xlim)
         plt.ylim(ylim)
 
-        plt.axes((0.15, 0.85, 0.8, 0.1), sharex=ax)
+        profax = plt.axes((0.15, 0.85, 0.8, 0.1), sharex=ax)
         dedisp_prof = dedisperse(data, delay_samples)[:-maxsamps/options.downsamp]
         plt.plot(np.linspace(xlim[0],xlim[1],dedisp_prof.size), dedisp_prof, 'k-')
-        plt.xticks([])
-        plt.yticks([])
+        plt.setp(profax.xaxis.get_ticklabels(), visible=False)
+        plt.setp(profax.yaxis.get_ticklabels(), visible=False)
         plt.xlim(xlim)
     fig.canvas.mpl_connect('key_press_event', keypress)
     plt.show()
