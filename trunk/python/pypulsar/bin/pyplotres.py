@@ -317,6 +317,7 @@ def plot_data(tempo_results, xkey, ykey, postfit=True, prefit=False, \
 def create_plot():
     # Set up the plot
     fig = plt.figure(figsize=(11,8.5))
+    fig.canvas.set_window_title("PyPlotres")
 
 
 def get_freq_label(lo, hi):

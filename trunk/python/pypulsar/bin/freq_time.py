@@ -109,6 +109,7 @@ def main():
 
     # plot data as an image
     fig = plt.figure()
+    fig.canvas.set_window_title("Frequency vs. Time")
     ax = plt.axes((0.15, 0.15, 0.8, 0.7))
     data_scaled = scale(data, indep=options.scaleindep)
     data_scaled = data_scaled[:-maxsamps/options.downsamp]
