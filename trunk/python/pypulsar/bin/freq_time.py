@@ -1,4 +1,4 @@
-#!/usr/bin/env pythong
+#!/usr/bin/env python
 
 """
 Plot frequency vs. time (non-dedispersed) for a filterbank file.
@@ -121,9 +121,12 @@ def main():
     plt.xlabel("Sample")
     plt.ylabel("Observing frequency (MHz)")
     plt.suptitle("Frequency vs. Time")
-    fig.text(0.05, 0.02, r"Start time: $\sim$ %s s, End time: $\sim$ %s s, " \
-                "Downsampled: %d bins, Smoothed: %d bins" % \
-                (options.start, options.end, options.downsamp, options.width), \
+    fig.text(0.05, 0.02, \
+                r"Start time: $\sim$ %s s, End time: $\sim$ %s s; " \
+                "Downsampled: %d bins, Smoothed: %d bins; " \
+                "DM trace: %g $cm^{-3}pc$" % \
+                (options.start, options.end, options.downsamp, \
+                    options.width, options.dm), \
                 ha="left", va="center", size="x-small")
     if options.dm is not None:
         xlim = plt.xlim()
