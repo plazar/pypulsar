@@ -55,7 +55,7 @@ class SnrEstimator:
         self.beam_profile = airy_pattern
       
     def estimate_snr(self, za, az, Smean, Sfreq, time, angsep, period, \
-                        w50=None, Serror=None, l=None, b=None):
+                        w50=None, Serror=None, l=None, b=None, spindx=-1.8):
         """Estimate signal-to-noise of a known pulsar.
         Returns signal-to-noise and error on signal-to-noise.
 
@@ -71,13 +71,15 @@ class SnrEstimator:
         Serror: error on flux density (in mJy).
         l: galactic longitude of pulsar (in deg).
         b: galactic latitude of pulsar (in deg).
+        spindx: power-law spectral index
         """
         if w50 is None:
             w50 = 0.05*period
 
         if self.freq != Sfreq:
             Smean, Serror = change_freq(Smean, error=Serror, \
-                                            oldfreq=Sfreq, newfreq=self.freq)
+                                            oldfreq=Sfreq, newfreq=self.freq, \
+                                            index=spindx)
             Sfreq = self.freq
         
         if l is not None and b is not None:
@@ -116,7 +118,7 @@ def airy_pattern(fwhm, x):
     return airy
 
 
-def change_freq(S, error, oldfreq, newfreq, index=-1.8):
+def change_freq(S, error, oldfreq, newfreq, index):
     """Change frequency.
 
     Return flux density and error for a new frequency.
@@ -127,7 +129,7 @@ def change_freq(S, error, oldfreq, newfreq, index=-1.8):
     newfreq: frequency of output S (in MHz).
     [index]: spectral index to use.
     """
-    k = (newfreq/oldfreq)**index
+    k = (float(newfreq)/float(oldfreq))**index
     newS = S*k
     if error is not None:
         newerror = error*k
