@@ -154,6 +154,37 @@ def keypress(event):
         plt.close()
 
 
+def get_data(obs, start, end, dm=0, subbands=None):
+    """Return a 2D array containing frequency channels, or subbands,
+        along axis 1 and time samples along axis 0. Each subband
+        is dedispersed at the given dm.
+
+        'start' and 'end' are the start and end times (in seconds) of
+        the interval requested.
+        'subbands' must evenly divide the number of channels in 'obs'.
+    """
+    if subbands is None:
+        subbands = obs.nchans
+
+    # Convert start and end times to samples
+    startsamp = start/obs.tsamp
+    endsamp = start/obs.tsamp
+    # Enlarge range of samples requested to accomodate dedispersion
+    raise NotImplementedError("get_data isn't fully implemented yet")
+
+    # Read data
+    data = fbobs.get_time_interval(start, end).astype('float32')
+    obs.close_all()
+    data.shape = (data.size/obs.nchans, obs.nchans)
+
+    # Generate dedispersed profile
+
+    # Generate subbands
+
+    # Generate list of times/samples and list of frequencies
+
+    # Return data and meta data
+
 def dedisperse(data, delays):
     """Given 'data', a 2D array containing frequency
         channels along axis 1 and time samples along
@@ -216,7 +247,6 @@ def smooth(data, factor=1):
         return data
     numchans = data.shape[1]
     kernel =  np.ones(factor, dtype='float32') / np.sqrt(factor)
-    
     for ii in np.arange(numchans):
         data[:,ii] = scipy.signal.convolve(data[:,ii], kernel, 'same')
     return data
