@@ -57,7 +57,8 @@ class PrestoFFT:
                 self.calcfreqs()
             if not delayread:
                 # Read all data immediately
-                self.rawpowers = self.read_fft()
+                self.fft = self.read_fft()
+                self.rawpowers = np.abs(self.fft)**2
             
             self.normalisation = "raw"
             self.powers = self.rawpowers
@@ -66,29 +67,31 @@ class PrestoFFT:
         """Calculate frequencies corresponding to power
             spectrum bins, and store as attribute of self.
         """
-        self.freqs = np.arange(0, self.inf.N/2)/(self.inf.N*self.inf.dt)
+        if self.freqs is None:
+            self.freqs = np.arange(0, self.inf.N/2)/(self.inf.N*self.inf.dt)
 
     def read_fft(self, count=-1):
         """Read 'count' powers from .fft file and return them.
             power = real*real + imag*imag
         """
         fft = np.fromfile(self.fftfile, dtype=np.dtype('c8'), count=count)
-        powers = np.abs(fft)**2
-        return powers
+        return fft
 
     def plot(self):
         """Plot the power spectrum.
         """
+        self.calcfreqs()
         plt.plot(self.freqs, self.powers, 'k-')
         plt.title(self.fftfn)
         plt.xlabel("Frequency (Hz)")
-        plt.ylabel("Normalised Power")
+        plt.ylabel("Power")
         plt.show()
 
-    def plot_3pane(self, showzap=False):
+    def plot_3pane(self, zapfile=None):
         """Plot the power spectrum in 3 panes.
             If 'showzap' is True show PALFA zaplist.
         """
+        self.calcfreqs()
         ones = (self.freqs>=1) & (self.freqs<10)
         tens = (self.freqs>=10) & (self.freqs<100) 
         hundreds = (self.freqs>=100) & (self.freqs<1000)
@@ -116,15 +119,16 @@ class PrestoFFT:
         maxpwr = np.max(self.powers[(self.freqs>=1) & (self.freqs<1000)])
         axones.set_ylim(0, maxpwr*1.1)
 
-        if showzap:
+        if zapfile is not None:
             # Plot regions that are zapped
-            zaplist = np.loadtxt("/homes/borgii/alfa/svn/workingcopy_PL/PALFA/miscellaneous/PALFA.zaplist")
+            zaplist = np.loadtxt(zapfile)
             for freq, width in zaplist:
                 for ax in (axones, axtens, axhundreds):
                     r = matplotlib.patches.Rectangle((freq-width/2.0, 0), width, maxpwr*1.1, \
                                                 fill=True, fc='b', ec='none', \
                                                 alpha=0.25, zorder=-1)
                     ax.add_patch(r)
+            plt.figtext(0.025, 0.03, "Zaplist file: %s" % zapfile, size="xx-small")
 
         plt.suptitle("Power Spectrum (%s)" % self.fftfn)
 
