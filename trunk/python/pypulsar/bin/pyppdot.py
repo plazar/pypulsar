@@ -21,10 +21,10 @@ import numpy as np
 import psr_utils
 from pypulsar.utils import colour
 
-MARKER_OPTIONS = {'facecolor':'none', 'zorder':2, 'alpha':0.8, 'lw':2, 's':50} 
+MARKER_OPTIONS = {'facecolor':'none', 'zorder':-2, 'alpha':0.8, 'lw':2, 's':100} 
 BINARY_MARKER = {'marker':'o', 'edgecolor':'g', 'label':'binary'}
 RRAT_MARKER = {'marker':'s', 'edgecolor':'c', 'label':'rrat'}
-MAGNETAR_MARKER = {'marker':'^', 'edgecolor':'m', 'label':'magnetar'}
+MAGNETAR_MARKER = {'marker':'^', 'facecolor':'#E066FF', 'edgecolor':'#E066FF', 'label':'magnetar'}
 SGR_MARKER = {'marker':'<', 'edgecolor':"#AB82FF", 'label':'sgr'}
 AXP_MARKER = {'marker':'>', 'edgecolor':"#FF7F24", 'label':'axp'}
 SNR_MARKER = {'marker':(4,1,0), 'edgecolor':'y', 'label':'snr'}
@@ -121,6 +121,7 @@ def pdot_from_edot(p, edot):
 
         (Use eq. 3.6 from Lorimer and Kramer.)
     """
+    p = np.asarray(p)
     # The multiplicative constant is: 1e-15/3.95e31
     return 2.5316455696202532e-47*edot*(p**3)
 
@@ -141,6 +142,7 @@ def pdot_from_bfield(p, bfield):
 
         (Use eq. 3.15 from Lorimer and Kramer.)
     """
+    p = np.asarray(p)
     # The multiplicative constant is: 1e-15/(1e12)**2
     return 1e-39*(bfield)**2/p
 
@@ -161,6 +163,7 @@ def pdot_from_age(p, age):
 
         (Use eq. 3.12 from Lorimer and Kramer.)
     """
+    p = np.asarray(p)
     return p/age/(2.0*psr_utils.SECPERJULYR)
 
 
@@ -337,9 +340,9 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
     else:
         scatt_snrs = None
 
-    plt.xlabel("Period (s)")
-    plt.ylabel(r"$\mathsf{\dot P}$ (s/s)")
-    plt.title(r"$\mathsf{P-\dot P}$ Diagram")
+    plt.xlabel(r"Period, $P$ (s)", size='x-large')
+    plt.ylabel(r"Period-derivative, $\dot P$ (s/s)", size='x-large')
+#    plt.title(r"$\mathsf{P-\dot P}$ Diagram")
     plt.xscale("log")
     plt.yscale("log")
     plt.xlim((0.001, 100))
@@ -354,35 +357,27 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
     print "\tNumber of binaries:", periods_bnry.size
     print "\tNumber of SNR associations:", periods_snr.size
 
-def draw_lines(bfields=[], edots=[], ages=[], label=False):
+def draw_lines(bfields=[], edots=[], ages=[], show_labels=True):
     """Draw multiple lines of constant B-field, edot and age.
     """
     plimits = plt.xlim()
     pdotlimits = plt.ylim()
-    periods = np.logspace(np.log10(plimits[0]), np.log10(plimits[1]), 100)
-    pdots = np.logspace(np.log10(pdotlimits[0]), np.log10(pdotlimits[1]), 100)
-    bfield_vals = np.zeros((periods.size, pdots.size))
-    edot_vals = np.zeros((periods.size, pdots.size))
-    age_vals = np.zeros((periods.size, pdots.size))
-    for i in np.arange(periods.size):
-        for j in np.arange(pdots.size):
-            f, fdot = psr_utils.p_to_f(periods[i], pdots[j])
-            # For some reason the transpose is expected by 'contour'...
-            bfield_vals[j][i] = psr_utils.pulsar_B(f, fdot)
-            edot_vals[j][i] = psr_utils.pulsar_edot(f, fdot)
-            age_vals[j][i] = psr_utils.pulsar_age(f, fdot)
-    if len(bfields) > 1:
-        cs_bfield = plt.contour(periods, pdots, bfield_vals, bfields, \
-                                colors='k', linestyles='dashdot')
-        if label: plt.clabel(cs_bfield, fmt=r'%g $G$')
-    if len(edots) > 1:
-        cs_edot = plt.contour(periods, pdots, edot_vals, edots, \
-                                colors='k', linestyles='dashed')
-        if label: plt.clabel(cs_edot, fmt=r'%g $erg/s$')
-    if len(ages) > 1:
-        cs_age = plt.contour(periods, pdots, age_vals, ages, \
-                                colors='k', linestyles='dotted')
-        if label: plt.clabel(cs_age, fmt=r'%g $yr$')
+    for B in bfields:
+        plt.plot(plimits, pdot_from_bfield(plimits, B), 'k--')
+    for age in ages:
+        plt.plot(plimits, pdot_from_age(plimits, age), 'k-.')
+    for edot in edots:
+        plt.plot(plimits, pdot_from_edot(plimits, edot), 'k:')
+#        label = "%g" % edot
+#        if "e+" in label:
+#            coef, e, pow = label.partition("e+")
+#            if coef != "1":
+#                label = r"$%s \times 10^{%s} erg/s$" % (coef, pow)
+#            else:
+#                label = r"$10^{%s} erg/s$" % pow
+#        else:
+#            label = r"$%s erg/s$" % label
+#        plt.text(0.1,0.1, label, transform = plt.gca().transAxes, picker=PICKER)
     plt.xlim(plimits)
     plt.ylim(pdotlimits)
     
@@ -418,11 +413,12 @@ def pick(event):
     global pulsars
     global highlight
     if event.mouseevent.button == 1 and len(event.ind) == 1:
+        label = event.artist.get_label()
         index = event.ind[0]
-        sys.stdout.write("Pulsar selected: ")
-        if event.artist.get_label() == 'pulsars':
+        print "Pulsar selected: ",
+        if label == 'pulsars':
             selected = pulsars[index]
-        elif event.artist.get_label() == 'highlight':
+        elif label == 'highlight':
             selected = highlight[index]
         else:
             print "What was selected?! Error?"
