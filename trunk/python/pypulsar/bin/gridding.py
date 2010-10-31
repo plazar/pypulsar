@@ -11,13 +11,15 @@
 import sys
 import numpy as np
 import scipy.optimize as opt
+from scipy.integrate import trapz
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
 import prepfold
 import psr_utils
-import coordconv
-import estimate_snr
+from pypulsar.utils.astro import sextant
+from pypulsar.utils.astro import protractor
+from pypulsar.utils import estimate_snr
 debug = 1
 
 class Observation:
@@ -32,10 +34,10 @@ class Observation:
         self.p = prepfold.pfd(pfdfn)
         # RA in arcmin
         print self.p.rastr
-        self.ra = coordconv.rastr_to_deg(coordconv.fmrastr_to_rastr(self.p.rastr))*60
+        self.ra = protractor.convert(self.p.rastr, 'hmsstr', 'deg')*60
         # Dec in arcmin
         print self.p.decstr
-        self.dec = coordconv.decstr_to_deg(coordconv.fmdecstr_to_decstr(self.p.decstr))*60
+        self.dec = protractor.convert(self.p.decstr, 'dmsstr', 'deg')*60
         self.snr = None
         self.width = None
         
@@ -116,13 +118,17 @@ class Observation:
         xmin = int(np.round(xmin))
         xmax = int(np.round(xmax))
 
+        # Calculate S/N using eq. 7.1 from Lorimer and Kramer
         offpulse = np.concatenate((self.p.bestprof.profile[:xmin], \
                                     self.p.bestprof.profile[xmax:]))
+        onpulse = self.p.bestprof.profile[xmin:xmax]
         mean = offpulse.mean()
         std = offpulse.std()
-        self.snr = ((self.p.bestprof.profile - mean) / std).max()
+        self.oldsnr = ((self.p.bestprof.profile - mean) / std).max()
+        weq = trapz((onpulse-mean)/std)/np.max((onpulse-mean)/std)
         self.width = xmax-xmin
-        
+        self.snr = np.sum(self.p.bestprof.profile-mean)/std/np.sqrt(weq)
+
         # disconnect mousemove, mouserelease and reset state
         self.eventpress = None
         self.mousepressed = False
