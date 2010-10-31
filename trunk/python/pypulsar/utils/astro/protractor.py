@@ -8,6 +8,7 @@ Patrick Lazarus, Jan 22nd, 2010
 import types
 import re
 import sys
+import warnings
 import numpy as np
 
 DEGTORAD = np.pi/180.0
@@ -30,7 +31,9 @@ def hmsstr_to_rad(hmsstr):
         # parse string using regular expressions
         match = hms_re.match(s)
         if match is None:
-            raise ValueError("Input is not a valid sexigesimal string: %s" % s)
+            warnings.warn("Input is not a valid sexigesimal string: %s" % s)
+            hours[i] = np.nan
+            continue
         d = match.groupdict(0) # default value is 0
 
         # Check sign of hms string
@@ -58,7 +61,9 @@ def dmsstr_to_rad(dmsstr):
         # parse string using regular expressions
         match = dms_re.match(s)
         if match is None:
-            raise ValueError("Input is not a valid sexigesimal string: %s" % s)
+            warnings.warn("Input is not a valid sexigesimal string: %s" % s)
+            degs[i] = np.nan
+            continue
         d = match.groupdict(0) # default value is 0
 
         # Check sign of dms string
