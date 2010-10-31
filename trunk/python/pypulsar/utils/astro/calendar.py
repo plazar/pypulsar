@@ -64,6 +64,15 @@ def MJD_to_JD(MJD):
     return MJD + 2400000.5
 
 
+def date_to_MJD(*args, **kwargs):
+    """Convert calendar date to Modified Julian Day (JD).
+        
+        All arguments are passed directly to "date_to_JD(...)",
+        so consult its documentation.
+    """
+    return JD_to_MJD(date_to_JD(*args, **kwargs))
+
+
 def date_to_JD(year, month, day, gregorian=True):
     """Convert calendar date to Julian Day (JD).
 
@@ -414,3 +423,21 @@ def fraction_of_year(year, month, day, gregorian=True):
     numdays[leaps] += 1.0
     frac = diff/numdays
     return frac.squeeze()
+
+def MJD_to_year(MJD):
+    """Given a MJD return the corresponding (fractional) year.
+
+        Inputs:
+            MJD
+    """
+    year, month, day = MJD_to_date(MJD) 
+    return year + fraction_of_year(year, month, day)
+
+
+def MJD_to_datestring(MJD):
+    """Given a MJD return the date formatted as a string.
+        
+        Inputs:
+            MJD
+    """
+    return date_to_string(*MJD_to_date(MJD))
