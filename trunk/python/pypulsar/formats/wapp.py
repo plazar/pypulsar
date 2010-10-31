@@ -5,6 +5,11 @@ wapp.py - WAPP file object
 
 Define a WAPP file object that can:
     - Interpret the header parameters of the WAPP data.
+
+Requires: pycparser - A parser for the C language written in python
+(http://code.google.com/p/pycparser/)
+
+Patrick Lazarus, Sept. 10, 2010
 """
 
 import sys
@@ -33,9 +38,13 @@ class wapp:
             self.header_params = []
             self.header_types = {}
             self.header = {}
+            self.file_size = os.path.getsize(self.filename)
+            self.binary_header_size = None
             self.header_size = None
             self.data_size = None
             self.number_of_samples = None
+            self.obs_time = None # Duration of data in file (in seconds)
+            self.bytes_per_lag = None
             self.wappfile = open(self.filename, 'rb')
             self.read_header()
     
@@ -65,6 +74,24 @@ class wapp:
             else:
                 self.header[name] = binarydata
         self.already_read_binary_header = True
+
+        # Calculate some useful stuff
+        self.header_size = self.wappfile.tell()
+        self.binary_header_size = self.header_size - self.ascii_header_size
+        self.data_size = self.file_size - self.header_size
+        if self.header['lagformat']==0:
+            # 16 bit lags, so 2 bytes per sample
+            self.bytes_per_lag = 2.0
+        elif self.heder['lagformat']==1:
+            # 32 bit lags, so 4 bytes per sample
+            self.bytes_per_lag = 4.0
+        else:
+            raise ValueError("Unexpected lagformat (%d)." % self.header['lagformat'])
+        self.number_of_samples = self.data_size/self.bytes_per_lag / \
+                                    self.header['num_lags']
+        self.obs_time = self.header['samp_time']*1e-6*self.number_of_samples
+        
+
 
     def read_ascii_header(self):
         """Peel off ASCII header from WAPP file and
