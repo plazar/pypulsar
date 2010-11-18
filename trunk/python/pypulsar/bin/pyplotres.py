@@ -309,7 +309,7 @@ def plot_data(tempo_results, xkey, ykey, postfit=True, prefit=False, \
                             horizontalalignment='left')
     
     # Make the legend and set its visibility state
-    leg = plt.figlegend(handles, labels, 'upper right')
+    leg = plt.figlegend(handles, labels, 'upper right', prop={"size":8})
     leg.set_visible(show_legend)
     leg.legendPatch.set_alpha(0.5)
     
@@ -324,6 +324,8 @@ def get_freq_label(lo, hi):
     """Return frequency label given a lo and hi
         frequency pair.
     """
+    if np.isposinf(hi):
+        hi = r'$\infty$'
     return "%s - %s MHz" % (lo, hi)
 
 
