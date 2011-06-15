@@ -2,7 +2,7 @@
 Coordinate conversion and formatting
 """
 
-import psr_utils, slalib
+import psr_utils
 
 def decstr_to_rad(decstr):
     """
@@ -199,7 +199,7 @@ def eqdeg_to_galdeg(ra, decl):
     Convert right ascension and declination (J2000)in 
     degrees to galactic longitude and latitude in degrees.
     """
-
+    import slalib
     l, b = slalib.sla_eqgal(ra*psr_utils.DEGTORAD, decl*psr_utils.DEGTORAD)
 
     return (l*psr_utils.RADTODEG, b*psr_utils.RADTODEG)
