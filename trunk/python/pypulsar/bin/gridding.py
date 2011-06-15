@@ -125,9 +125,15 @@ class Observation:
         mean = offpulse.mean()
         std = offpulse.std()
         self.oldsnr = ((self.p.bestprof.profile - mean) / std).max()
-        weq = trapz((onpulse-mean)/std)/np.max((onpulse-mean)/std)
+        weq = trapz((onpulse-mean)/std)/(np.max((onpulse-mean)/std)/2.0)
         self.width = xmax-xmin
         self.snr = np.sum(self.p.bestprof.profile-mean)/std/np.sqrt(weq)
+        if debug:
+            print "Width selected (bins):", self.width
+            print "Equivalent width (bins):", weq
+            print "Integral under the normalised on-pulse region:", \
+                    trapz((onpulse-mean)/std)
+            print "SNR:", self.snr
 
         # disconnect mousemove, mouserelease and reset state
         self.eventpress = None
