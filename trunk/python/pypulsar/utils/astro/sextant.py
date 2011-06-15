@@ -327,7 +327,7 @@ def precess_J2000_to_B1950(ra, decl, input="sexigesimal", output="sexigesimal"):
 
 def precess(ra, decl, inequinox, outequinox, \
                 input="sexigesimal", output="sexigesimal"):
-    """Given right ascension and declination (in unitls of 'input') in 'inequinox'
+    """Given right ascension and declination (in units of 'input') in 'inequinox'
         equinox, precess to 'outequinox' equinox (returned in units of 'output').
 
         Possible values for input and output are "sexigesimal", "deg" and "rad".
@@ -387,3 +387,20 @@ def precess(ra, decl, inequinox, outequinox, \
         outdecl = protractor.convert(outdecl, "rad", output)
 
     return (outra, outdecl)
+
+def angsep(ra1, dec1, ra2, dec2, input="sexigesimal", output="deg"):
+    """
+    return angular separation in units of 'output'.
+    ra1, dec1, ra2, dec2 are all given in unites of 'input'.
+    
+    Possible values for input and output are "sexigesimal", "deg" and "rad".
+    """
+    
+    ra1_rad = protractor.convert(ra1, input, "rad")
+    ra2_rad = protractor.convert(ra2, input, "rad")
+    dec1_rad = protractor.convert(dec1, input, "rad")
+    dec2_rad = protractor.convert(dec2, input, "rad")
+    angsep_rad = np.arccos(np.sin(dec1_rad)*np.sin(dec2_rad)+\
+                    np.cos(dec1_rad)*np.cos(dec2_rad)*np.cos(ra1_rad-ra2_rad))
+    angsep = protractor.convert(angsep_rad, "rad", "deg")
+    return angsep
