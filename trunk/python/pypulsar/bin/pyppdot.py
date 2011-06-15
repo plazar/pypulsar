@@ -60,8 +60,10 @@ class Pulsar:
         self.magnetar = (psrtype is not None and psrtype!='No info' and \
                             ('axp' in psrtype.lower() or 'sgr' in psrtype.lower()))
         self.sgr = (psrtype is not None and psrtype!='No info' and \
+                    assoc is not None and assoc !='No info' and \
                             ('axp' in psrtype.lower() and 'sgr' in assoc.lower()))
         self.axp = (psrtype is not None and psrtype!='No info' and \
+                    assoc is not None and assoc !='No info' and \
                             ('axp' in psrtype.lower() and 'sgr' not in assoc.lower()))
         self.snr = (assoc is not None and assoc!='No info' and 'snr' in assoc.lower())
         self.binary = (binarytype is not None and binarytype!='No info')
@@ -362,6 +364,15 @@ def draw_lines(bfields=[], edots=[], ages=[], show_labels=True):
     """
     plimits = plt.xlim()
     pdotlimits = plt.ylim()
+#    ps = np.logspace(np.log10(plimits[0]), np.log10(plimits[1]), 1000)
+#    pds = np.logspace(np.log10(pdotlimits[0]), np.log10(pdotlimits[1]), 1000)
+#    fs, fds = np.meshgrid(*psr_utils.p_to_f(ps, pds))
+#    if bfields:
+#        print "Bfields!", bfields
+#        bs = psr_utils.pulsar_B(fs, fds)
+#        print bs
+#        bcontour = plt.contour(ps, pds, bs, bfields, linestyles='dashdot')
+#        plt.clabel(bcontour, manual=True, fmt='%g')
     for B in bfields:
         plt.plot(plimits, pdot_from_bfield(plimits, B), 'k--')
     for age in ages:
