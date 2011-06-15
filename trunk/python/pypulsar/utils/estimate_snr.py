@@ -11,7 +11,7 @@ import types
 import numpy as np
 from scipy import special
 
-import skytemp
+from pypulsar.utils import skytemp
 
 verbose = True
 
