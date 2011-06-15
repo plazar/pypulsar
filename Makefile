@@ -1,3 +1,3 @@
 .PHONY: clean
 clean:
-	rm -f *# *~ *.o *.pyc *.pyo
+	find . -name '*.pyc' | xargs -n 1 -- rm -f
