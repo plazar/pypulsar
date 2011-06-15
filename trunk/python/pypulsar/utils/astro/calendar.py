@@ -196,9 +196,11 @@ def JD_to_date(JD):
 
     day = B - D - np.floor(30.6001*E) + F
     month = E - 1
-    month[(E==14.0) | (E==15.0)] = E - 13
+    ii = (E==14.0) | (E==15.0)
+    month[ii] = (E - 13.0)[ii]
     year = C - 4716
-    year[(month==1.0) | (month==2.0)] = C - 4715
+    ii = (month==1.0) | (month==2.0)
+    year[ii] = (C - 4715)[ii]
 
     return (year.astype('int').squeeze(), month.astype('int').squeeze(), \
                 day.squeeze())
@@ -342,7 +344,7 @@ def num_to_month(month):
         month = [month]
     strings = []
     for m in month:
-        if type(m) != types.IntType and type(m) != np.int32:
+        if type(m) not in (types.IntType, np.int32, np.int64):
             raise TypeError("month must be of type integer. type(month): %s" % \
                                 type(m))
         if m not in NUM_TO_MONTH:
