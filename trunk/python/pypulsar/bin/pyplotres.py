@@ -9,8 +9,12 @@ import optparse
 import sys
 import re
 import os
+import os.path
 import types
+import shutil
+import tempfile
 import warnings
+import subprocess
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -27,6 +31,27 @@ xind = 0
 # Available y-axis types
 yvals = ['phase', 'usec', 'sec']
 yind = 0
+
+
+def get_resids():
+    """Read residuals using 'residuals.py' and return them.
+    """
+    # Need to check if on 32-bit or 64-bit computer
+    # (the following is a hack to find out if we're on a borg or borgii node)
+    if os.uname()[4]=='i686':
+        # 32-bit computer
+        r = residuals.read_residuals()
+    else:
+        # 64-bit computer
+        r = residuals.read_residuals_64bit()
+    return r
+
+
+class TempoError(Exception):
+    """Error to throw when TEMPO returns with a non-zero error code.
+    """
+    pass
+
 
 class TempoResults:
     def __init__(self, freqbands=[[0, 'inf']]):
@@ -60,19 +85,13 @@ class TempoResults:
         # Read parfiles
         self.inpar = par.psr_par(inparfn)
         self.outpar = par.psr_par(outparfn)
-        
+   
         # Read residuals
-        # Need to check if on 32-bit or 64-bit computer
-        # (the following is a hack to find out if we're on a borg or borgii node)
-        if os.uname()[4]=='i686':
-            # 32-bit computer
-            r = residuals.read_residuals()
-        else:
-            # 64-bit computer
-            r = residuals.read_residuals_64bit()
+        r = get_resids()
 
         self.max_TOA = r.bary_TOA.max()
         self.min_TOA = r.bary_TOA.min()
+        
         self.freqbands = freqbands 
         self.residuals = {}
         for lo,hi in self.freqbands:
@@ -192,7 +211,7 @@ class Resids:
             elif yopt == 'usec':
                 ydata = self.postfit_sec*1e6
                 yerror = self.uncertainty*1e6
-                ylabel = "Residuals (uSeconds)"
+                ylabel = r"Residuals ($\mu$s)"
             elif yopt == 'sec':
                 ydata = self.postfit_sec
                 yerror = self.uncertainty
@@ -257,6 +276,13 @@ def plot_data(tempo_results, xkey, ykey, postfit=True, prefit=False, \
             resids = tempo_results.residuals[freq_label]
             xlabel, xdata = resids.get_xdata(xkey)
             ylabel, ydata, yerr = resids.get_ydata(ykey, usepostfit)
+            #if not usepostfit and xkey in ('mjd', 'year'):
+            #    ignore, prex = tempo_results.prefit_ephem_resids.get_xdata(xkey)
+            #    ignore, prey, ignore2 = tempo_results.prefit_ephem_resids.get_ydata(ykey, False)
+            #    ignore, postx = tempo_results.postfit_ephem_resids.get_xdata(xkey)
+            #    ignore, posty, ignore2 = tempo_results.postfit_ephem_resids.get_ydata(ykey, False)
+            #    plt.plot(prex, prey-posty, 'k:', lw=0.25)
+                
             if len(xdata):
                 # Plot the residuals
                 handle = plt.errorbar(xdata, ydata, yerr=yerr, fmt='.', \
@@ -291,10 +317,12 @@ def plot_data(tempo_results, xkey, ykey, postfit=True, prefit=False, \
             plt.xlim((xmin, xmax))
         plt.xlabel(xlabel)
         plt.ylabel(ylabel)
-        if usepostfit:
-            plt.title("Postfit Redisuals (Number of TOAs: %d)" % TOAcount)
-        else:
-            plt.title("Prefit Redisuals (Number of TOAs: %d)" % TOAcount)
+        plt.tick_params(labelsize='small')
+        if interactive:
+            if usepostfit:
+                plt.title("Postfit Redisuals (Number of TOAs: %d)" % TOAcount)
+            else:
+                plt.title("Prefit Redisuals (Number of TOAs: %d)" % TOAcount)
         subplot += 1
     
     if numsubplots > 1:
