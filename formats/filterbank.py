@@ -50,16 +50,19 @@ class filterbank:
             
             # Calculate additional information
             # Such as: datatype, numsamps, datasize, hdrsize
-            if self.header['nbits'] == 32:
+            if self.nbits == 32:
                 self.dtype = 'float32'
             else:
-                self.dtype = 'int%d' % self.header['nbits']
+                self.dtype = 'int%d' % self.nbits
             self.header_size = self.filfile.tell()
             self.data_size = os.stat(self.filename)[6] - self.header_size
-            bytes_per_sample = self.header['nchans'] * (self.header['nbits']/8)
+            bytes_per_sample = self.nchans * (self.nbits/8)
             if self.data_size % bytes_per_sample:
                 warnings.warn("Not an integer number of samples in file.")
             self.number_of_samples = self.data_size / bytes_per_sample
+
+    def __getattr__(self, name):
+        return self.header[name]
 
     def print_header(self):
         """Print header parameters and values.
@@ -76,8 +79,8 @@ class filterbank:
                     in filterbank file.
         """
         self.read_header()
-        self.frequencies = self.header['fch1'] + \
-                            self.header['foff']*np.arange(self.header['nchans'])
+        self.frequencies = self.fch1 + self.foff*np.arange(self.nchans)
+        self.is_hifreq_first = (self.foff < 0)
 
     def read_sample(self):
         """
@@ -89,7 +92,7 @@ class filterbank:
               a sample.
         """
         self.read_header()
-        return np.fromfile(self.filfile, dtype=self.dtype, count=self.header['nchans'])
+        return np.fromfile(self.filfile, dtype=self.dtype, count=self.nchans)
 
     def read_all_samples(self):
         """
@@ -109,7 +112,7 @@ class filterbank:
               a sample.
         """
         self.read_header()
-        return np.fromfile(self.filfile, dtype=self.dtype, count=self.header['nchans']*N)
+        return np.fromfile(self.filfile, dtype=self.dtype, count=self.nchans*N)
     
     def seek_to_header_start(self):
         self.filfile.seek(0)
@@ -124,7 +127,7 @@ class filterbank:
         sampnum=0.
         """
         self.read_header()
-        self.filfile.seek(self.header_size + self.header['nbits']/8*self.header['nchans']*sampnum)
+        self.filfile.seek(self.header_size + self.nbits/8*self.nchans*sampnum)
         
     def seek_to_position(self, posn):
         """
