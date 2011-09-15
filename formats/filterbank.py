@@ -53,7 +53,7 @@ class filterbank:
             if self.nbits == 32:
                 self.dtype = 'float32'
             else:
-                self.dtype = 'int%d' % self.nbits
+                self.dtype = 'uint%d' % self.nbits
             self.header_size = self.filfile.tell()
             self.data_size = os.stat(self.filename)[6] - self.header_size
             bytes_per_sample = self.nchans * (self.nbits/8)
