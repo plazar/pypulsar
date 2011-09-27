@@ -392,14 +392,32 @@ def angsep(ra1, dec1, ra2, dec2, input="sexigesimal", output="deg"):
     """
     return angular separation in units of 'output'.
     ra1, dec1, ra2, dec2 are all given in unites of 'input'.
+    If 'input' is not a string, it is assumed to be a 2-tuple, defining
+    the input format for ra1/dec1, and ra2/dec2 respectively.
     
     Possible values for input and output are "sexigesimal", "deg" and "rad".
     """
-    
-    ra1_rad = protractor.convert(ra1, input, "rad")
-    ra2_rad = protractor.convert(ra2, input, "rad")
-    dec1_rad = protractor.convert(dec1, input, "rad")
-    dec2_rad = protractor.convert(dec2, input, "rad")
+    if type(input)==types.StringType:
+        # input type is same for both sets of coords
+        input1 = input
+        input2 = input
+    else:
+        # Assume input argument is a tuple contaning 2 strings
+        input1 = input[0]
+        input2 = input[1]
+    if input1=="sexigesimal":
+        ra1_rad = protractor.convert(ra1, "hmsstr", "rad")
+        dec1_rad = protractor.convert(dec1, "dmsstr", "rad")
+    else:
+        ra1_rad = protractor.convert(ra1, input1, "rad")
+        dec1_rad = protractor.convert(dec1, input1, "rad")
+    if input2=="sexigesimal":
+        ra2_rad = protractor.convert(ra2, "hmsstr", "rad")
+        dec2_rad = protractor.convert(dec2, "dmsstr", "rad")
+    else:
+        ra2_rad = protractor.convert(ra2, input2, "rad")
+        dec2_rad = protractor.convert(dec2, input2, "rad")
+
     angsep_rad = np.arccos(np.sin(dec1_rad)*np.sin(dec2_rad)+\
                     np.cos(dec1_rad)*np.cos(dec2_rad)*np.cos(ra1_rad-ra2_rad))
     angsep = protractor.convert(angsep_rad, "rad", "deg")
