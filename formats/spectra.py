@@ -8,7 +8,7 @@ class Spectra(object):
     """A class to store spectra. This is mainly to provide
         reusable functionality.
     """
-    def __init__(self, freqs, dt, data, starttime=0, dm=0, mask=np.ma.nomask):
+    def __init__(self, freqs, dt, data, starttime=0, dm=0):
         """Spectra constructor.
             
             Inputs:
@@ -29,7 +29,7 @@ class Spectra(object):
         assert len(freqs)==self.numchans
 
         self.freqs = freqs
-        self.data = np.ma.MaskedArray(data.astype('float'), mask=mask)
+        self.data = data.astype('float')
         self.dt = dt
         self.starttime = starttime
         self.dm = 0
@@ -182,6 +182,45 @@ class Spectra(object):
             if indep:
                 max = chan.max()
             chan[:] = (chan-min)/max
+        return other
+
+    def masked(self, mask, maskval='median-mid80'):
+        """Replace masked data with 'maskval'. Returns
+            a masked copy of the Spectra object.
+            
+            Inputs:
+                mask: An array of boolean values of the same size and shape
+                    as self.data. True represents an entry to be masked.
+                maskval: Value to use when masking. This can be a numeric
+                    value, 'median', 'mean', or 'median-mid80'.
+
+                    The values 'median' and 'mean' refer to the median and
+                    mean of the channel, respectively. The value 'median-mid80'
+                    refers to the median of the channel after the top and bottom
+                    10% of the sorted channel is removed.
+                    (Default: 'median-mid80')
+
+            Output:
+                maskedspec: A masked version of the Spectra object.
+        """
+        assert self.data.shape == mask.shape
+        other = copy.deepcopy(self)
+        maskvals = np.ones(other.numchans)
+        for ii in range(other.numchans):
+            chan = other.get_chan(ii)
+            # Use 'chan[:]' so update happens in-place
+            # this way the change effects other.data
+            if maskval=='mean':
+                maskvals[ii]=np.mean(chan)
+            elif maskval=='median':
+                maskvals[ii]=np.median(chan)
+            elif maskval=='median-mid80':
+                n = int(np.round(0.1*self.numspectra))
+                maskvals[ii]=np.median(sorted(chan)[n:-n])
+            else:
+                maskvals[ii]=maskval
+        tmp = np.ones_like(other.data)*maskvals[:,np.newaxis]
+        other.data = np.where(mask, tmp, other.data)
         return other
 
     def dedisperse(self, dm=0, padval=0):
