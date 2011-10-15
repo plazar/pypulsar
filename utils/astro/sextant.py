@@ -395,11 +395,17 @@ def angsep(ra1, dec1, ra2, dec2, input="sexigesimal", output="deg"):
     
     Possible values for input and output are "sexigesimal", "deg" and "rad".
     """
-    
-    ra1_rad = protractor.convert(ra1, input, "rad")
-    ra2_rad = protractor.convert(ra2, input, "rad")
-    dec1_rad = protractor.convert(dec1, input, "rad")
-    dec2_rad = protractor.convert(dec2, input, "rad")
+   
+    if input=="sexigesimal":
+        ra1_rad = protractor.convert(ra1, 'hmsstr', "rad")
+        ra2_rad = protractor.convert(ra2, 'hmsstr', "rad")
+        dec1_rad = protractor.convert(dec1, 'dmsstr', "rad")
+        dec2_rad = protractor.convert(dec2, 'dmsstr', "rad")
+    else:
+        ra1_rad = protractor.convert(ra1, input, "rad")
+        ra2_rad = protractor.convert(ra2, input, "rad")
+        dec1_rad = protractor.convert(dec1, input, "rad")
+        dec2_rad = protractor.convert(dec2, input, "rad")
     angsep_rad = np.arccos(np.sin(dec1_rad)*np.sin(dec2_rad)+\
                     np.cos(dec1_rad)*np.cos(dec2_rad)*np.cos(ra1_rad-ra2_rad))
     angsep = protractor.convert(angsep_rad, "rad", "deg")
