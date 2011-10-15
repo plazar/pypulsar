@@ -22,15 +22,13 @@ import rfifind
 from pypulsar.formats import filterbank
 from pypulsar.formats import spectra
 
-def get_data(fil, startsamp, N, mask=np.ma.nomask):
+def get_data(fil, startsamp, N):
     """Return 2D array of data from filterbank file.
 
         Inputs:
             fil: Filterbank object
             startsamp: Starting sample
             N: number of samples to read
-            mask: mask to use to remove bad values from data
-                (Default: No mask)
 
         Output:
             data: 2D numpy array
@@ -39,7 +37,7 @@ def get_data(fil, startsamp, N, mask=np.ma.nomask):
     data = fil.read_Nsamples(N)
     data.shape = (N, fil.header['nchans'])
     return spectra.Spectra(fil.frequencies, fil.tsamp, data.T, \
-                            starttime=options.start, dm=0, mask=mask)
+                            starttime=options.start, dm=0)
 
 
 def get_mask(rfimask, startsamp, N):
@@ -56,11 +54,13 @@ def get_mask(rfimask, startsamp, N):
                 True represents an element that should be masked.
     """
     sampnums = np.arange(startsamp, startsamp+N)
-    intnums = np.floor(sampnums/rfimask.ptsperint).astype('int')
+    blocknums = np.floor(sampnums/rfimask.ptsperint).astype('int')
     mask = np.zeros((N, rfimask.nchan), dtype='bool')
-    for intnum in np.unique(intnums):
-        mask[intnums==intnum][:,rfimask.mask_zap_chans_per_int[intnum]] = True
-    return mask
+    for blocknum in np.unique(blocknums):
+        blockmask = np.zeros_like(mask[blocknums==blocknum])
+        blockmask[:,rfimask.mask_zap_chans_per_int[blocknum]] = True
+        mask[blocknums==blocknum] = blockmask
+    return mask.T
         
 
 def main():
@@ -76,38 +76,35 @@ def main():
     if options.maskfile is not None:
         rfimask = rfifind.rfifind(options.maskfile) 
         mask = get_mask(rfimask, start_bin, nbins)
-        data = get_data(fil, start_bin, nbins, mask=mask)
+        data = get_data(fil, start_bin, nbins)
+        # Mask data
+        data = data.masked(mask, maskval='median-mid80')
     else:
         data = get_data(fil, start_bin, nbins)
 
     # Subband data
     if (options.nsub is not None) and (options.subdm is not None):
         data.subband(options.nsub, options.subdm, padval='mean')
-    print type(data.data)
 
     # Dedisperse
     if options.dm:
         data.dedisperse(options.dm, padval='mean')
-    print type(data.data)
 
     # Downsample
     data.downsample(options.downsamp)
-    print type(data.data)
 
     # scale data
     data = data.scaled(options.scaleindep)
-    print type(data.data)
     
     # Smooth
     if options.width_bins > 1:
         data.smooth(options.width_bins, padval='mean')
-    print type(data.data)
     
     # Ploting it up
     fig = plt.figure()
     fig.canvas.set_window_title("Frequency vs. Time")
     ax = plt.axes((0.15, 0.15, 0.8, 0.7))
-    plt.imshow(data.data.mask, aspect='auto', \
+    plt.imshow(data.data, aspect='auto', \
                 cmap=matplotlib.cm.cmap_d[options.cmap], \
                 interpolation='nearest', origin='upper', \
                 extent=(data.starttime, data.starttime+data.numspectra*data.dt, \
