@@ -60,7 +60,7 @@ def main():
         print "Using parfile: %s" % options.parfile
         # generate polycos
         print "Automatically generating polycos..."
-        polycos = mypolycos.create_polycos(options.parfile, timeseries.infdata)
+        polycos = mypolycos.create_polycos_from_inf(options.parfile, timeseries.infdata)
         mjd = timeseries.infdata.epoch
         mjdi = int(mjd) # integer part of mjd
         mjdf = mjd-mjdi # fractional part of mjd

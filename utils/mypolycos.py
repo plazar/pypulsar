@@ -128,28 +128,26 @@ class polycos:
         goodpoly = self.select_polyco(mjdi, mjdf)
         return self.polycos[goodpoly].doppler
 
-def create_polycos(par, infdata):
-    """Create polycos object from a parfile.
-        Arguments:
-            - 'par': parfile's filename, or a parfile object.
-            - 'infdata': inffile's filename, or an infodata object.
+
+def create_polycos_from_inf(par, infdata):
+    """A convenience function to create polycos for the observation
+        with info in the given *.inf file.
+
+        Inputs:
+            par: parfile's filename, or a parfile object.
+            infdata: inffile's filename, or an infodata object.
+
+        Ouput:
+            new_polycos: polycos object
     """
-    if type(par)==types.StringType:
-        # assume par is a filename
-        par = parfile.psr_par(par)
-    else:
-        # assume par is already a parfile.psr_par object
-        pass
     if type(infdata)==types.StringType:
         # assume infdata is a filename
         infdata = infodata.infodata(infdata)
     else:
         # assume infdata is already an infodata.infodata object
         pass
-    
     obslength = (infdata.dt*infdata.N) / psr_utils.SECPERDAY
     telescope_id = telescopes.telescope_to_id[infdata.telescope]
-    max_hour_angle = telescopes.telescope_to_maxha[infdata.telescope]
     if telescope_id != 'o' and telescope_id !='@':
         center_freq = infdata.lofreq + (infdata.numchan/2 - 0.5) * \
                                             infdata.chan_width
@@ -160,6 +158,46 @@ def create_polycos(par, infdata):
     else:
         # optical, X-ray, or gamma-ray data
         center_freq = 0.0
+
+    start_mjd = int(infdata.epoch) 
+    end_mjd = int(infdata.epoch+obslength)+1
+
+    return create_polycos(par, telescope_id, center_freq, start_mjd, end_mjd) 
+
+
+def create_polycos(par, telescope_id, center_freq, start_mjd, end_mjd, \
+                    max_hour_angle=None, span=SPAN_DEFAULT, \
+                    numcoeffs=NUMCOEFFS_DEFAULT, keep_file=False):
+    """Create polycos object from a parfile.
+        Inputs:
+            par: parfile's filename, or a parfile object.
+            telescope_id: The TEMPO 1-character telescope identifier.
+            center_freq: The observation's center frequencies in MHz.
+            start_mjd: MJD on which the polycos should start.
+            end_mjd: MJD until the polycos should extend.
+            max_hour_angle: The maximum hour angle as expected by tempo.
+                (Default: Use default value chosen for given telescope).
+            span: Span of each set of polycos in min.
+                (Default: %d min).
+            numcoeffs: Number of coefficients to use.
+                (Default: %d).
+            keep_file: If true do not delete polyco.dat file.
+                (Default: delete polyco.dat file).
+
+        Output:
+            new_polycos: a polycos object.
+    """ % (SPAN_DEFAULT, NUMCOEFFS_DEFAULT)
+    if type(par)==types.StringType:
+        # assume par is a filename
+        par = parfile.psr_par(par)
+    else:
+        # assume par is already a parfile.psr_par object
+        pass
+   
+    if max_hour_angle is None:
+        telescope_name = telescopes.id_to_telescope[telescope_id]
+        max_hour_angle = telescopes.telescope_to_maxha[telescope_name]
+    
     tzfile = open("tz.in", "w")
     # Default parameters for prediction mode
     tzfile.write("%s %d %d %d %0.5f\n" % (telescope_id, max_hour_angle, \
@@ -172,10 +210,10 @@ def create_polycos(par, infdata):
     tempo = subprocess.Popen("tempo -z -f %s" % par.FILE, shell=True, \
                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, \
                         stderr=subprocess.PIPE)
-    (out, err) = tempo.communicate("%d %d\n" % (int(infdata.epoch), \
-                                        int(infdata.epoch+obslength)+1))
+    (out, err) = tempo.communicate("%d %d\n" % (start_mjd, end_mjd))
     new_polycos = polycos(filenm='polyco.dat')
     # Remove files created by us and by TEMPO
     os.remove("tz.in")
-    os.remove("polyco.dat")
+    if not keep_file:
+        os.remove("polyco.dat")
     return new_polycos
