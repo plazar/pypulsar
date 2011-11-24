@@ -21,7 +21,7 @@ import numpy as np
 import psr_utils
 from pypulsar.utils import colour
 
-MARKER_OPTIONS = {'facecolor':'none', 'zorder':-2, 'alpha':0.8, 'lw':2, 's':100} 
+MARKER_OPTIONS = {'facecolor':'none', 'zorder':-2, 'alpha':0.8, 'lw':2, 's':200} 
 BINARY_MARKER = {'marker':'o', 'edgecolor':'g', 'label':'binary'}
 RRAT_MARKER = {'marker':'s', 'edgecolor':'c', 'label':'rrat'}
 MAGNETAR_MARKER = {'marker':'^', 'facecolor':'#E066FF', 'edgecolor':'#E066FF', 'label':'magnetar'}
@@ -34,7 +34,7 @@ PICKER = 100
 
 class Pulsar:
     def __init__(self, name, p, pdot, raj, decj, dm, \
-                    binarytype, assoc, psrtype):
+                    binarytype, assoc, psrtype, pdot_uplim=False):
         """Pulsar object.
             Attributes:
                 name - Name
@@ -46,10 +46,13 @@ class Pulsar:
                 binarytype - Binary type
                 assoc - Associations
                 psrtype - Pulsar type
+                pdot_uplim - True if pdot reported is an upper limit 
+                                (Default: False)
         """
         self.name = name
         self.p = p
         self.pdot = pdot
+        self.pdot_uplim = pdot_uplim 
         self.raj = raj
         self.decj = decj
         self.dm = dm
@@ -196,7 +199,7 @@ def params_from_ppdot(p, pdot):
 
 def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
                 magnetars=False, snrs=False, axp=False, sgr=False, \
-                edots=[], ages=[], bsurfs=[]):
+                edots=[], ages=[], bsurfs=[], size=15):
     """Plot P-Pdot diagram using list of pulsars provided.
         binaries - boolean, initially plot binary markers
         rrats - boolean, initially plot RRAT markers
@@ -212,9 +215,20 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
     pdots = np.array([x.pdot for x in pulsars \
                         if x.p is not None and x.pdot is not None])
     
+    # Points that only have a limit on pdot
+    period_lims = np.array([x.p for x in pulsars \
+                        if x.p is not None and x.pdot is not None and x.pdot_uplim])
+    pdot_lims = np.array([x.pdot for x in pulsars \
+                        if x.p is not None and x.pdot is not None and x.pdot_uplim])
+
     ax = plt.axes()
-    scatt_psrs = ax.scatter(periods, pdots, c='k', s=6, \
+    scatt_psrs = ax.scatter(periods, pdots, c='k', s=size, \
                             label='pulsars', picker=PICKER, zorder=0)
+    if len(pdot_lims) and len(period_lims):
+        yerror = 2.5e-15
+        scatt_psrs_lim = ax.errorbar(period_lims, pdot_lims-yerror, \
+                                yerr=yerror, linewidth=2, mew=2, \
+                                lolims=True, marker='none', c='k', zorder=0)
 
     # Pulsars to highlight
     numhl = 0
@@ -223,9 +237,16 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
                             if h.p is not None and h.pdot is not None])
         pdots_hl = np.array([h.pdot for h in highlight \
                             if h.p is not None and h.pdot is not None])
+        periods_hl_lim = np.array([h.p for h in highlight \
+                            if h.p is not None and h.pdot is not None and h.pdot_uplim])
+        pdots_hl_lim = np.array([h.pdot for h in highlight \
+                            if h.p is not None and h.pdot is not None and h.pdot_uplim])
         scatt_psrs_hl = ax.scatter(periods_hl, pdots_hl, \
-                                    c='r', s=50, label='highlight', picker=PICKER, \
+                                    c='r', s=150, label='highlight', picker=PICKER, \
                                     marker=(5,1,0), edgecolors='r', zorder=1)
+        if len(pdots_hl_lim) and len(periods_hl_lim):
+            scatt_psrs_hl_lim = ax.errorbar(periods_hl_lim, pdots_hl_lim, yerr=1, \
+                                    uplims=True, marker='.', c='r', zorder=1)
         numhl = periods_hl.size
 
     # Mark binaries
@@ -345,10 +366,14 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
     plt.xlabel(r"Period, $P$ (s)", size='x-large')
     plt.ylabel(r"Period-derivative, $\dot P$ (s/s)", size='x-large')
 #    plt.title(r"$\mathsf{P-\dot P}$ Diagram")
+    plt.xticks(size='large')
+    plt.yticks(size='large')
     plt.xscale("log")
     plt.yscale("log")
     plt.xlim((0.001, 100))
     plt.ylim((10**-22, 10**-8))
+    plt.rc(('xtick.major', 'ytick.major'), size=8)
+    plt.rc(('xtick.minor', 'ytick.minor'), size=4)
     draw_lines(bsurfs, edots, ages)
 
     print "Plot Inventory:"
@@ -374,11 +399,11 @@ def draw_lines(bfields=[], edots=[], ages=[], show_labels=True):
 #        bcontour = plt.contour(ps, pds, bs, bfields, linestyles='dashdot')
 #        plt.clabel(bcontour, manual=True, fmt='%g')
     for B in bfields:
-        plt.plot(plimits, pdot_from_bfield(plimits, B), 'k--')
+        plt.plot(plimits, pdot_from_bfield(plimits, B), 'k--', lw=2)
     for age in ages:
-        plt.plot(plimits, pdot_from_age(plimits, age), 'k-.')
+        plt.plot(plimits, pdot_from_age(plimits, age), 'k-.', lw=2)
     for edot in edots:
-        plt.plot(plimits, pdot_from_edot(plimits, edot), 'k:')
+        plt.plot(plimits, pdot_from_edot(plimits, edot), 'k:', lw=2)
 #        label = "%g" % edot
 #        if "e+" in label:
 #            coef, e, pow = label.partition("e+")
@@ -570,6 +595,9 @@ def create_plot(pulsars, highlight=[], interactive=True, **kwargs):
     fig.canvas.set_window_title("P-Pdot")
     plot_data(pulsars, highlight, **kwargs)
     
+    all_atnf = parse_pulsar_file("../lib/pulsars/DM150+.txt")
+    plot_data(all_atnf, size=2)
+
     if interactive:
         # Before setting up our own event handlers delete matplotlib's
         # default 'key_press_event' handler.
@@ -630,7 +658,14 @@ def parse_pulsar_file(psrfn='pulsars.txt', indent=""):
             nonplottable += 1
             continue
         else:
-            pdot = float(split_line[2])
+            pdot_str = split_line[2]
+            if pdot_str[0]=='<':
+                pdot_uplim = True
+                pdot = float(pdot_str[1:])
+            else:
+                pdot_uplim = False
+                pdot = float(pdot_str)
+
             
         if len(split_line) < 4 or split_line[3] == '*':
             raj = None
@@ -668,7 +703,7 @@ def parse_pulsar_file(psrfn='pulsars.txt', indent=""):
         else:
             psrtype = split_line[8]
         pulsars.append(Pulsar(name, p, pdot, raj, decj, dm, \
-                                binarytype, assoc, psrtype))
+                                binarytype, assoc, psrtype, pdot_uplim=pdot_uplim))
     print indent+"    Number of pulsars that cannot be plotted (no P or Pdot): %d" % nonplottable
     print indent+"    Done parsing file."
     return pulsars
@@ -710,6 +745,7 @@ def main():
                 magnetars=options.magnetars, rrats=options.rrats, \
                 snrs=options.snrs, edots=options.edots, ages=options.ages, \
                 bsurfs=options.bsurfs)
+
 
 
 if __name__=='__main__':
