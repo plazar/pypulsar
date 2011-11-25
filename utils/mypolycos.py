@@ -55,17 +55,27 @@ class polyco:
                 self.coeffs[linenum*3+0] = float(sl[0].replace('D', 'E'))
                 self.coeffs[linenum*3+1] = float(sl[1].replace('D', 'E'))
                 self.coeffs[linenum*3+2] = float(sl[2].replace('D', 'E'))
+    
     def phase(self, mjdi, mjdf):
         """
         self.phase(mjdi, mjdf):
             Return the predicted pulsar phase at a given integer and frational MJD.
+        """
+        return self.rotation(mjdi, mjdf) % 1
+
+    def rotation(self, mjdi, mjdf):
+        """
+        self.rotation(mjdi, mjdf):
+            Return the predicted pulsar (fractional) rotation at a 
+            given integer and fractional MJD.
         """
         DT = ((mjdi-self.TMIDi)+(mjdf-self.TMIDf))*1440.0
         phase = self.coeffs[self.numcoeff-1]
         for ii in range(self.numcoeff-1, 0, -1):
             phase = DT*phase + self.coeffs[ii-1]
         phase += self.RPHASE + DT*60.0*self.F0
-        return phase - Num.floor(phase)
+        return phase 
+
     def freq(self, mjdi, mjdf):
         """
         self.freq(mjdi, mjdf):
@@ -76,7 +86,8 @@ class polyco:
         for ii in range(self.numcoeff-1, 0, -1):
             psrfreq = DT*psrfreq + ii*self.coeffs[ii]
         return self.F0 + psrfreq/60.0
-        
+
+
 class polycos:
     def __init__(self, filenm="polyco.dat"):
         self.file = filenm
@@ -111,15 +122,40 @@ class polycos:
             sys.stderr.write("Cannot find a valid polyco at %f!\n" % (mjdi+mjdf))
         return goodpoly
 
+    def get_phase(self, mjdi, mjdf):
+        """
+        self.get_phase(mjdi, mjdf):
+            Return the predicted pulsar phase for the specified time.
+        """
+        goodpoly = self.select_polyco(mjdi, mjdf)
+        return self.polycos[goodpoly].phase(mjdi, mjdf) 
+
+    def get_rotation(self, mjdi, mjdf):
+        """
+        self.get_rotation(mjdi, mjdf):
+            Return the predicted pulsar (fractional) rotation 
+            number for the specified time.
+        """
+        goodpoly = self.select_polyco(mjdi, mjdf)
+        return self.polycos[goodpoly].rotation(mjdi, mjdf) 
+
+    def get_freq(self, mjdi, mjdf):
+        """
+        self.get_freq(mjdi, mjdf):
+            Return the predicted pulsar spin frquency for the specified time.
+        """
+        goodpoly = self.select_polyco(mjdi, mjdf)
+        return self.polycos[goodpoly].freq(mjdi, mjdf) 
+
     def get_phs_and_freq(self, mjdi, mjdf):
         """
-        self.get_voverc(mjdi, mjdf):
+        self.get_phs_and_freq(mjdi, mjdf):
             Return the predicted pulsar phase and spin frquency for the specified time.
         """
         goodpoly = self.select_polyco(mjdi, mjdf)
         return (self.polycos[goodpoly].phase(mjdi, mjdf), 
                 self.polycos[goodpoly].freq(mjdi, mjdf))
-
+    
     def get_voverc(self, mjdi, mjdf):
         """
         self.get_voverc(mjdi, mjdf):
