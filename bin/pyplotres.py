@@ -134,6 +134,53 @@ class TempoResults:
         description.append("\tFrequency (MHz): %s" % r.bary_freq[index][0])
         return description
 
+    def get_postfit_model(self, startmjd, endmjd, numpts=1000):
+        """Return the postfit model that was subtracted from
+            the prefit redisuals for the MJD range provided.
+
+            Inputs:
+                startmjd: The starting MJD.
+                endmjd: The ending MJD.
+                numpts: The number of points to use.
+                    (Default: 1000)
+
+            Outputs:
+                mjds: The MJDs corresponding to the model.
+                model: A numpy array with redsiduals representing the
+                    model that was subtracted from the prefit residuals
+                    to get the postfit residual.
+        """
+        # Establish a list of MJDs to determin the model at
+        mjds = np.linspace(startmjd, endmjd, numpts)
+
+        # Get phase and freq for each MJD with the postfit ephem
+        postfit_polycos = mypolycos.create_polycos(self.outpar, \
+                            '3', 1410, startmjd, endmjd)
+        
+        phases = np.empty(numpts)
+        freqs = np.empty(numpts)
+        for ii, mjd in enumerate(mjds):
+            mjdi = int(mjd)
+            mjdf = mjd%1
+            phs, freq = postfit_polycos.get_phs_and_freq(mjdi, mjdf)
+            phases[ii] = phs
+            freqs[ii] = freq
+
+        # Round MJDs to nearest integer rotations
+        phases -= 1*(phases>0.5)
+        mjds -= phases/freqs/psr_utils.SECPERDAY
+
+        # Input MJDs into prefit ephem to find resids in phase
+        prefit_polycos = mypolycos.create_polycos(self.inpar,
+                            '3', 1410, startmjd, endmjd)
+        model = np.empty(numpts)
+        for ii, mjd in enumerate(mjds):
+            mjdi = int(mjd)
+            mjdf = mjd%1
+            model = prefit_polycos.get_phase(mjdi, mjdf)
+        model -= 1*(model>0.5)
+        
+        return mjds, model
 
 
 class Resids:
@@ -166,7 +213,6 @@ class Resids:
         self.inpar = inpar
         self.outpar = outpar
         
-
     def get_xdata(self, key):
         """Return label describing xaxis and the corresponding 
             data given keyword 'key'.
@@ -190,7 +236,6 @@ class Resids:
             raise ValueError("Unknown xaxis type (%s)." % xopt)
         return (xlabel, xdata)
 
-    
     def get_ydata(self, key, postfit=True):
         """Return label describing yaxis and the corresponding 
             data/errors given keyword 'key'.
@@ -276,12 +321,10 @@ def plot_data(tempo_results, xkey, ykey, postfit=True, prefit=False, \
             resids = tempo_results.residuals[freq_label]
             xlabel, xdata = resids.get_xdata(xkey)
             ylabel, ydata, yerr = resids.get_ydata(ykey, usepostfit)
-            #if not usepostfit and xkey in ('mjd', 'year'):
-            #    ignore, prex = tempo_results.prefit_ephem_resids.get_xdata(xkey)
-            #    ignore, prey, ignore2 = tempo_results.prefit_ephem_resids.get_ydata(ykey, False)
-            #    ignore, postx = tempo_results.postfit_ephem_resids.get_xdata(xkey)
-            #    ignore, posty, ignore2 = tempo_results.postfit_ephem_resids.get_ydata(ykey, False)
-            #    plt.plot(prex, prey-posty, 'k:', lw=0.25)
+            if not usepostfit and xkey == 'mjd' and ykey == 'phase':
+                mjds, model = tempo_results.get_postfit_model(min(xdata), \
+                                                                max(xdata))
+                plt.plot(mjds, model, 'k:', lw=0.25)
                 
             if len(xdata):
                 # Plot the residuals
@@ -340,7 +383,7 @@ def plot_data(tempo_results, xkey, ykey, postfit=True, prefit=False, \
     leg = plt.figlegend(handles, labels, 'upper right', prop={"size":8})
     leg.set_visible(show_legend)
     leg.legendPatch.set_alpha(0.5)
-    
+
 
 def create_plot():
     # Set up the plot
