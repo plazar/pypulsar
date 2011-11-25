@@ -20,10 +20,11 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
-import slalib
 import binary_psr
 import parfile as par
 import residuals
+
+from pypulsar.utils.astro import calendar
 
 # Available x-axis types
 xvals = ['mjd', 'year', 'numtoa', 'orbitphase']
@@ -43,7 +44,8 @@ def get_resids():
         r = residuals.read_residuals()
     else:
         # 64-bit computer
-        r = residuals.read_residuals_64bit()
+        # r = residuals.read_residuals_64bit()
+        r = residuals.read_residuals()
     return r
 
 
@@ -184,7 +186,7 @@ class Resids:
             xdata = self.orbit_phs
             xlabel = "Orbital Phase"
         elif xopt == 'year':
-            xdata = mjd_to_year(self.bary_TOA)
+            xdata = calendar.MJD_to_year(self.bary_TOA)
             xlabel = "Year"
         else:
             raise ValueError("Unknown xaxis type (%s)." % xopt)
@@ -313,11 +315,11 @@ def plot_data(tempo_results, xkey, ykey, postfit=True, prefit=False, \
                     plt.axvline(peri_mjd, ls=':', label='_nolegend_', c='k', lw=0.5)
                 elif xkey == 'year':
                     print "plotting peri passage"
-                    plt.axvline(mjd_to_year(peri_mjd), ls=':', label='_nolegend_', c='k', lw=0.5)
+                    plt.axvline(calendar.MJD_to_year(peri_mjd), ls=':', label='_nolegend_', c='k', lw=0.5)
             plt.xlim((xmin, xmax))
         plt.xlabel(xlabel)
         plt.ylabel(ylabel)
-        plt.tick_params(labelsize='small')
+        #plt.tick_params(labelsize='small')
         if interactive:
             if usepostfit:
                 plt.title("Postfit Redisuals (Number of TOAs: %d)" % TOAcount)
@@ -532,20 +534,6 @@ def keypress(event):
             plt.ylim(ymin, ymax)
         elif event.key.lower() == 'h':
             print_help() 
-
-
-def mjd_to_year(mjds):
-    mjds = np.asarray(mjds)
-    if mjds.size < 1:
-        return mjds
-    old_shape = mjds.shape # Remember original shape
-    mjds.shape = (mjds.size, 1)
-    years, months, days, fracs, stats = np.apply_along_axis(slalib.sla_djcl, 1, mjds).transpose()
-    # Take into account leap years
-    daysperyear = (((years % 4) == 0) & (((years % 100) != 0) | ((years % 400) == 0))) * 1 + 365.0
-    years, days, stats = np.array([slalib.sla_clyd(*ymd) for ymd in np.vstack((years, months, days)).transpose()]).transpose()
-    mjds.shape = old_shape # Change back to original shape
-    return (years + (days + fracs) / daysperyear)
 
 
 def parse_options():
