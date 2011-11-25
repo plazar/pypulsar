@@ -214,15 +214,15 @@ def create_polycos(par, telescope_id, center_freq, start_mjd, end_mjd, \
             max_hour_angle: The maximum hour angle as expected by tempo.
                 (Default: Use default value chosen for given telescope).
             span: Span of each set of polycos in min.
-                (Default: %d min).
+                (Default: 60 min).
             numcoeffs: Number of coefficients to use.
-                (Default: %d).
+                (Default: 12).
             keep_file: If true do not delete polyco.dat file.
                 (Default: delete polyco.dat file).
 
         Output:
             new_polycos: a polycos object.
-    """ % (SPAN_DEFAULT, NUMCOEFFS_DEFAULT)
+    """
     if type(par)==types.StringType:
         # assume par is a filename
         par = parfile.psr_par(par)
