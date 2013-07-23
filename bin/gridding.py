@@ -11,144 +11,12 @@
 import sys
 import numpy as np
 import scipy.optimize as opt
-from scipy.integrate import trapz
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
 
-import prepfold
 import psr_utils
-from pypulsar.utils.astro import sextant
-from pypulsar.utils.astro import protractor
 from pypulsar.utils import estimate_snr
+import pfd_snr
 debug = 1
-
-class Observation:
-    """ Observation object
-    """
-    def __init__(self, pfdfn):
-        """
-        Read pfd file and return arrays of snr, ra and dec
-    
-        Input: pfdfn - a pfd filename
-        """
-        self.p = prepfold.pfd(pfdfn)
-        # RA in arcmin
-        print self.p.rastr
-        self.ra = protractor.convert(self.p.rastr, 'hmsstr', 'deg')*60
-        # Dec in arcmin
-        print self.p.decstr
-        self.dec = protractor.convert(self.p.decstr, 'dmsstr', 'deg')*60
-        self.snr = None
-        self.width = None
-        
-        self.get_snr(self.p)
-
-    def get_snr(self, pfd):
-        """
-        Return signal-to-noise ratio for the pfd object.
-
-        Input: pfd - a pfd object.
-        """
-        self.fig = plt.figure()
-        self.ax = plt.gca()
-        plt.plot(pfd.bestprof.profile, 'k-')
-        self.cid_keypress = self.fig.canvas.mpl_connect('key_press_event', \
-                                                            self.keypress)
-        self.cid_mouseclick = self.fig.canvas.mpl_connect('button_press_event', \
-                                                            self.mousepress)
-        self.rectprops = dict(facecolor='blue', edgecolor='blue', linewidth=2, \
-                                alpha=0.5, fill=True)
-        ymin, ymax = self.ax.get_ylim()
-        self.to_draw = Rectangle((0,ymin-1e10), 0, ymax-ymin+2e10, visible=False, \
-                                    **self.rectprops)
-        self.ax.add_patch(self.to_draw)
-        self.eventpress = None
-
-        plt.show()
-
-    def mousepress(self, event):
-        if event.inaxes and event.button==1:
-            self.mousepressed = True
-            self.cid_mousemove = self.fig.canvas.mpl_connect('motion_notify_event', \
-                                                                self.mousemove)
-            self.cid_mouserelease = self.fig.canvas.mpl_connect('button_release_event', \
-                                                                self.mouserelease)
-            self.eventpress = event
-            self.to_draw.set_visible(True)
-            self.fig.canvas.draw()
-
-    def mousemove(self, event):
-        # update rectangle, draw
-        if event.inaxes:
-            xmin = self.eventpress.xdata
-            xmax = event.xdata
-            # Switch xmin/xmax
-            if xmin > xmax: 
-                xmin, xmax = xmax, xmin
-            if xmin < 0:
-                xmin = 0
-            if xmax > len(self.p.bestprof.profile)-1:
-                xmax = len(self.p.bestprof.profile)-1
-            xmin = int(np.round(xmin))
-            xmax = int(np.round(xmax))
-            self.to_draw.set_x(xmin)
-            self.to_draw.set_width(xmax-xmin)
-            self.fig.canvas.draw_idle()
-        
-    def mouserelease(self, event):
-        # remove rectangle (flash in red first for effect)
-        self.to_draw.set_facecolor('red')
-        self.to_draw.set_edgecolor('red')
-        self.fig.canvas.draw()
-        self.to_draw.set_visible(False)
-        self.fig.canvas.draw()
-        self.to_draw.set_facecolor('blue')
-        self.to_draw.set_edgecolor('blue')
-            
-        # compute snr and pulse width
-        xmin = self.eventpress.xdata
-        xmax = event.xdata
-        # Switch xmin/xmax
-        if xmin > xmax: 
-            xmin, xmax = xmax, xmin
-        if xmin < 0:
-            xmin = 0
-        if xmax > len(self.p.bestprof.profile)-1:
-            xmax = len(self.p.bestprof.profile)-1
-        xmin = int(np.round(xmin))
-        xmax = int(np.round(xmax))
-
-        # Calculate S/N using eq. 7.1 from Lorimer and Kramer
-        offpulse = np.concatenate((self.p.bestprof.profile[:xmin], \
-                                    self.p.bestprof.profile[xmax:]))
-        onpulse = self.p.bestprof.profile[xmin:xmax]
-        mean = offpulse.mean()
-        std = offpulse.std()
-        self.oldsnr = ((self.p.bestprof.profile - mean) / std).max()
-        weq = trapz((onpulse-mean)/std)/(np.max((onpulse-mean)/std)/2.0)
-        self.width = xmax-xmin
-        self.snr = np.sum(self.p.bestprof.profile-mean)/std/np.sqrt(weq)
-        if debug:
-            print "Width selected (bins):", self.width
-            print "Equivalent width (bins):", weq
-            print "Integral under the normalised on-pulse region:", \
-                    trapz((onpulse-mean)/std)
-            print "SNR:", self.snr
-
-        # disconnect mousemove, mouserelease and reset state
-        self.eventpress = None
-        self.mousepressed = False
-        self.fig.canvas.mpl_disconnect(self.cid_mousemove)
-        self.fig.canvas.mpl_disconnect(self.cid_mouserelease)
-
-        # Display width and snr
-        print "SNR:", self.snr
-        print "Width (bins):", self.width
-
-    def keypress(self, event):
-        if event.key == 'enter' and self.snr is not None and \
-                self.width is not None:
-            plt.close(event.canvas.figure.number)
 
 def observed_snr(psrsnr, psrra, psrdec):
     """
@@ -195,7 +63,7 @@ def angsep_arcmin(ra1, dec1, ra2, dec2):
 
 
 def main():
-    observations = [Observation(pfdfn) for pfdfn in sys.argv[1:]]
+    observations = [pfd_snr.Observation(pfdfn) for pfdfn in sys.argv[1:]]
     data = np.array([(o.snr, o.ra, o.dec) for o in observations])
     if debug:
         print "data:"
