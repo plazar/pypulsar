@@ -420,5 +420,5 @@ def angsep(ra1, dec1, ra2, dec2, input="sexigesimal", output="deg"):
 
     angsep_rad = np.arccos(np.sin(dec1_rad)*np.sin(dec2_rad)+\
                     np.cos(dec1_rad)*np.cos(dec2_rad)*np.cos(ra1_rad-ra2_rad))
-    angsep = protractor.convert(angsep_rad, "rad", "deg")
+    angsep = protractor.convert(angsep_rad, "rad", output)
     return angsep
