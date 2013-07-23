@@ -19,6 +19,12 @@ import infodata
 NUMCOEFFS_DEFAULT = 12
 SPAN_DEFAULT = 60 # span of each poylco in minutes
 
+DEBUG = False
+VERBOSE = False
+
+# Turn on verbosity if debugging message are on.
+VERBOSE = DEBUG or VERBOSE
+
 class polyco:
     def __init__(self, fileptr):
         line = fileptr.readline()
@@ -99,15 +105,16 @@ class polycos:
         while(tmppoly.psr):
 	    if (len(self.polycos)):
                 if (tmppoly.dataspan != self.dataspan):
-                    sys.stderr.write("Data span is changing!\n")
+                    raise PolycoError("Data span is changing!\n")
                 if (tmppoly.psr != psrname):
-                    sys.stderr.write("Multiple PSRs in same polycos file!\n")    
+                    raise PolycoError("Multiple PSRs in same polycos file!\n")    
             else:
                 self.dataspan = tmppoly.dataspan
             self.polycos.append(tmppoly)
             self.TMIDs.append(tmppoly.TMID)
             tmppoly = polyco(infile)
-        print "Read %d polycos\n" % len(self.polycos)
+        if VERBOSE:
+            print "Success! Read %d polycos\n" % len(self.polycos)
         self.TMIDs = Num.asarray(self.TMIDs)
         infile.close()
         self.validrange = 0.5*self.dataspan/1440.0
@@ -119,7 +126,7 @@ class polycos:
         """
         goodpoly = Num.argmin(Num.fabs(self.TMIDs-(mjdi+mjdf)))
         if (Num.fabs(self.TMIDs[goodpoly]-(mjdi+mjdf)) > self.validrange):
-            sys.stderr.write("Cannot find a valid polyco at %f!\n" % (mjdi+mjdf))
+            raise PolycoError("Cannot find a valid polyco at %f!\n" % (mjdi+mjdf))
         return goodpoly
 
     def get_phase(self, mjdi, mjdf):
@@ -240,8 +247,8 @@ def create_polycos(par, telescope_id, center_freq, start_mjd, end_mjd, \
                             SPAN_DEFAULT, NUMCOEFFS_DEFAULT, center_freq))
     # TEMPO ignores lines 2 and 3 in tz.in file
     tzfile.write("\n\n") 
-    tzfile.write("%s %d %d %d %0.5f\n" % (par.PSR, SPAN_DEFAULT, \
-                        NUMCOEFFS_DEFAULT, max_hour_angle, center_freq)) 
+    tzfile.write("%s %d %d %d %0.5f\n" % (par.PSR, span, \
+                        numcoeffs, max_hour_angle, center_freq)) 
     tzfile.close()
     tempo = subprocess.Popen("tempo -z -f %s" % par.FILE, shell=True, \
                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, \
@@ -249,7 +256,12 @@ def create_polycos(par, telescope_id, center_freq, start_mjd, end_mjd, \
     (out, err) = tempo.communicate("%d %d\n" % (start_mjd, end_mjd))
     new_polycos = polycos(filenm='polyco.dat')
     # Remove files created by us and by TEMPO
-    os.remove("tz.in")
+    if not DEBUG:
+        os.remove("tz.in")
     if not keep_file:
         os.remove("polyco.dat")
     return new_polycos
+
+
+class PolycoError(Exception):
+    pass
