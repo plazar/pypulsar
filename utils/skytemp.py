@@ -20,9 +20,7 @@ import healpy
 import numpy as np
 import matplotlib.pyplot as plt
 
-
-HASLAM_MAP_FILENAME = "/homes/borgii/alfa/research/PALFA/skytemp/" \
-                        "lambda_haslam408_dsds.fits"
+HASLAM_MAP_FILENAME = "lambda_haslam408_dsds.fits"
 
 HASLAM_FREQ = 408.0 # MHz
 SYNCHROTRON_INDEX = -2.7
