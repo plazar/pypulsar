@@ -88,9 +88,9 @@ def date_to_JD(year, month, day, gregorian=True):
     if type(month) == types.StringType:
         month = month_to_num(month)
     
-    year = np.atleast_1d(year)
-    month = np.atleast_1d(month)
-    day = np.atleast_1d(day)
+    year = np.copy(np.atleast_1d(year))
+    month = np.copy(np.atleast_1d(month))
+    day = np.copy(np.atleast_1d(day))
     
     year[month<=2] -= 1
     month[month<=2] += 12
@@ -173,7 +173,7 @@ def JD_to_date(JD):
 
         (Follow Jean Meeus' Astronomical Algorithms, 2nd Ed., Ch. 7)
     """
-    JD = np.atleast_1d(JD)
+    JD = np.copy(np.atleast_1d(JD))
     
     if np.any(JD<0.0):
         raise ValueError("This function does not apply for JD < 0.")
@@ -432,7 +432,7 @@ def MJD_to_year(MJD):
         Inputs:
             MJD
     """
-    year, month, day = MJD_to_date(MJD) 
+    year, month, day = MJD_to_date(MJD)
     return year + fraction_of_year(year, month, day)
 
 
