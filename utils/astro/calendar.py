@@ -436,6 +436,22 @@ def MJD_to_year(MJD):
     return year + fraction_of_year(year, month, day)
 
 
+def year_to_MJD(year):
+    """Give a (fractional) year return the corresponding MJD.
+
+        Inputs:
+            year
+    """
+    yy = year.astype('int')
+    frac = year % 1
+    numdays = np.atleast_1d(365*np.ones_like(year))
+    leaps = np.atleast_1d(is_leap_year(year, gregorian=True))
+    numdays[leaps] += 1.0
+    days = frac*numdays
+    mjd = date_to_MJD(yy, 1, 1) + days
+    return mjd
+
+
 def MJD_to_datestring(MJD):
     """Given a MJD return the date formatted as a string.
         
