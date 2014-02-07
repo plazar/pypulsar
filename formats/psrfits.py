@@ -9,8 +9,9 @@ import re
 import os
 import warnings
 import sys
+import argparse
 
-import slalib
+import pyslalib.slalib as slalib
 import pyfits
 import numpy as np
 import psr_utils
@@ -48,8 +49,6 @@ class SpectraInfo:
         self.need_flipband = False
 
         for ii, fn in enumerate(filenames):
-            if debug:
-                print "Reading '%s'" % fn
             if not is_PSRFITS(fn):
                 raise ValueError("File '%s' does not appear to be PSRFITS!" % fn)
             
@@ -289,6 +288,8 @@ class SpectraInfo:
             self.need_flipband = True
         # Compute the bandwidth
         self.BW = self.num_channels * self.df
+        self.mjd = int(self.start_MJD[0])
+        self.secs = (self.start_MJD[0] % 1)*psr_utils.SECPERDAY
 
     def __str__(self):
         """Format spectra_info's information into a easy to
@@ -362,6 +363,9 @@ class SpectraInfo:
 
         return '\n'.join(result)
 
+    def __getitem__(self, key):
+        return getattr(self, key)
+
 
 def DATEOBS_to_MJD(dateobs):
     """Convert DATE-OBS string from PSRFITS primary HDU to a MJD.
@@ -406,10 +410,20 @@ def debug_mode(mode=None):
 
 
 def main():
-    infiles = sys.argv[1:] # input files
-    specinf = SpectraInfo(infiles)
-    print specinf
+    specinf = SpectraInfo(args.files)
+    if args.output is not None:
+        print args.output % specinf
+    else:
+        if debug:
+            print "Reading '%s'" % fn
+        print specinf
 
 
 if __name__=='__main__':
+    parser = argparse.ArgumentParser(description="Get info about PSRFITS files.")
+    parser.add_argument("files", metavar="FILE", nargs='+', \
+                        type=str, help="PSRFITS files.")
+    parser.add_argument("-o", type=str, dest="output", default=None, \
+                        help="String to interpolate with info about the file.")
+    args = parser.parse_args()
     main()
