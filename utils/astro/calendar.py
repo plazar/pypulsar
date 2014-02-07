@@ -55,13 +55,13 @@ NUM_TO_DAY = {0: 'Sunday',
 def JD_to_MJD(JD):
     """Convert Julian Day (JD) to Modified Julian Day (MJD).
     """
-    return JD - 2400000.5
+    return np.asarray(JD) - 2400000.5
 
 
 def MJD_to_JD(MJD):
     """Convert Modified Julian Day (MJD) to Julian Day (JD).
     """
-    return MJD + 2400000.5
+    return np.asarray(MJD) + 2400000.5
 
 
 def date_to_MJD(*args, **kwargs):
