@@ -45,8 +45,32 @@ def MJD_to_GST(MJD):
 
         Converts MJD to JD and calls JD_to_GST(...)
     """
-    JD = MJD_to_JD(MJD)
+    JD = calendar.MJD_to_JD(MJD)
     return JD_to_GST(JD)
+
+
+def MJD_lon_to_LST(MJD, lon):
+    """Given the longitude of an observer return the LST
+        at a given MJD.
+
+        Inputs:
+            MJD: The MJD to consider.
+            lon: The longitude of the observer (in degrees).
+                NOTE: longitudes West should be negative.
+                    longitudes East should be positive.
+
+        Output:
+            LST: The local sidereal time for the observer (in hours).
+    """
+    # Get Greenwich mean sidereal time
+    GST = MJD_to_GST(MJD)
+
+    lon_hours = lon/15.0
+
+    LST = GST + lon_hours
+    LST = LST % 24.0
+
+    return LST
 
 
 def JD_to_mstUT_deg(JD):
