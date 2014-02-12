@@ -145,8 +145,8 @@ class Observation:
                                     self.prof[xmax:]))
         mean = offpulse.mean()
         scaled = self.prof-mean
-        print xmin, xmax
-        print scaled[xmin:xmax]
+        #print xmin, xmax
+        #print scaled[xmin:xmax]
         #plt.figure()
         #plt.plot(scaled, drawstyle='steps-post')
         #plt.show()
