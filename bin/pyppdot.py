@@ -21,7 +21,7 @@ import numpy as np
 import psr_utils
 from pypulsar.utils import colour
 
-MARKER_OPTIONS = {'facecolor':'none', 'zorder':-2, 'alpha':0.8, 'lw':2, 's':200} 
+MARKER_OPTIONS = {'facecolor':'none', 'zorder':1, 'alpha':0.8, 'lw':4, 's':200} 
 BINARY_MARKER = {'marker':'o', 'edgecolor':'g', 'label':'binary'}
 RRAT_MARKER = {'marker':'s', 'edgecolor':'c', 'label':'rrat'}
 MAGNETAR_MARKER = {'marker':'^', 'facecolor':'#E066FF', 'edgecolor':'#E066FF', 'label':'magnetar'}
@@ -228,7 +228,7 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
         yerror = 2.5e-15
         scatt_psrs_lim = ax.errorbar(period_lims, pdot_lims-yerror, \
                                 yerr=yerror, linewidth=2, mew=2, \
-                                lolims=True, marker='none', c='k', zorder=0)
+                                lolims=True, marker=None, c='k', zorder=0)
 
     # Pulsars to highlight
     numhl = 0
@@ -257,14 +257,18 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
                             if x.p is not None and x.pdot is not None \
                                 and x.binary==True])
     global scatt_binaries
+    global scatt_binaries_pnts
     if periods_bnry.size:
         scatter_options = MARKER_OPTIONS.copy()
         scatter_options.update(BINARY_MARKER)
         scatt_binaries = ax.scatter(periods_bnry, pdots_bnry, \
                                     **scatter_options)
+        scatt_binaries_pnts = ax.scatter(periods_bnry, pdots_bnry, \
+                                    c='k', s=size, zorder=2)
         if not binaries:
             # Hide binaries for now
             scatt_binaries.set_visible(False)
+            scatt_binaries_pnts.set_visible(False)
     else:
         scatt_binaries = None
 
@@ -276,14 +280,18 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
                             if x.p is not None and x.pdot is not None \
                                 and x.rrat==True])
     global scatt_rrats
+    global scatt_rrats_pnts
     if periods_rrat.size:
         scatter_options = MARKER_OPTIONS.copy()
         scatter_options.update(RRAT_MARKER)
         scatt_rrats = ax.scatter(periods_rrat, pdots_rrat, \
                                     **scatter_options)
+        scatt_rrats_pnts = ax.scatter(periods_rrat, pdots_rrat, \
+                                    c='k', s=size, zorder=2)
         if not rrats:
             # Hide RRATs for now
             scatt_rrats.set_visible(False)
+            scatt_rrats_pnts.set_visible(False)
     else:
         scatt_rrats = None
 
@@ -295,14 +303,18 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
                             if x.p is not None and x.pdot is not None \
                                 and x.magnetar==True])
     global scatt_magnetars
+    global scatt_magnetars_pnts
     if periods_mag.size:
         scatter_options = MARKER_OPTIONS.copy()
         scatter_options.update(MAGNETAR_MARKER)
         scatt_magnetars = ax.scatter(periods_mag, pdots_mag, \
                                     **scatter_options)
+        scatt_magnetars_pnts = ax.scatter(periods_mag, pdots_mag, \
+                                    c='k', s=size, zorder=2)
         if not magnetars:
             # Hide magnetars for now
             scatt_magnetars.set_visible(False)
+            scatt_magnetars_pnts.set_visible(False)
     else:
         scatt_magnetars = None
 
@@ -352,14 +364,18 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
                             if x.p is not None and x.pdot is not None \
                                 and x.snr==True])
     global scatt_snrs
+    global scatt_snrs_pnts
     if periods_snr.size:
         scatter_options = MARKER_OPTIONS.copy()
         scatter_options.update(SNR_MARKER)
         scatt_snrs = ax.scatter(periods_snr, pdots_snr, \
                                     **scatter_options)
+        scatt_snrs_pnts = ax.scatter(periods_snr, pdots_snr, \
+                                c='k', s=size, zorder=2)
         if not snrs:
             # Hide SNRs for now
             scatt_snrs.set_visible(False)
+            scatt_snrs_pnts.set_visible(False)
     else:
         scatt_snrs = None
 
@@ -496,33 +512,39 @@ def keypress(event):
         elif event.key.lower() == 'b':
             # Mark binaries
             global scatt_binaries
+            global scatt_binaries_pnts
             if scatt_binaries is not None:
                 print "Toggling binaries..."
                 visible = scatt_binaries.get_visible()
                 # visible is True/False. 'not visible' will toggle state.
                 scatt_binaries.set_visible(not visible)
+                scatt_binaries_pnts.set_visible(not visible)
                 event.canvas.draw()
             else:
                 print "(No binaries)"
         elif event.key.lower() == 'r':
             # Mark RRATs
             global scatt_rrats
+            global scatt_rrats_pnts
             if scatt_rrats is not None:
                 print "Toggling RRATs..."
                 visible = scatt_rrats.get_visible()
                 # visible is True/False. 'not visible' will toggle state.
                 scatt_rrats.set_visible(not visible)
+                scatt_rrats_pnts.set_visible(not visible)
                 event.canvas.draw()
             else:
                 print "(No RRATs)"
         elif event.key.lower() == 'm':
             # Mark magnetars
             global scatt_magnetars
+            global scatt_magnetars_pnts
             if scatt_magnetars is not None:
                 print "Toggling magnetars..."
                 visible = scatt_magnetars.get_visible()
                 # visible is True/False. 'not visible' will toggle state.
                 scatt_magnetars.set_visible(not visible)
+                scatt_magnetars_pnts.set_visible(not visible)
                 event.canvas.draw()
             else:
                 print "(No magnetars)"
@@ -551,11 +573,13 @@ def keypress(event):
         elif event.key.lower() == 'n':
             # Mark SNRs
             global scatt_snrs
+            global scatt_snrs_pnts
             if scatt_snrs is not None:
                 print "Toggling SNR associations..."
                 visible = scatt_snrs.get_visible()
                 # visible is True/False. 'not visible' will toggle state.
                 scatt_snrs.set_visible(not visible)
+                scatt_snrs_pnts.set_visible(not visible)
                 event.canvas.draw()
             else:
                 print "(No SNR associations)"
@@ -595,8 +619,8 @@ def create_plot(pulsars, highlight=[], interactive=True, **kwargs):
     fig.canvas.set_window_title("P-Pdot")
     plot_data(pulsars, highlight, **kwargs)
     
-    all_atnf = parse_pulsar_file("../lib/pulsars/DM150+.txt")
-    plot_data(all_atnf, size=2)
+    #all_atnf = parse_pulsar_file("../lib/pulsars/DM150+.txt")
+    #plot_data(all_atnf, size=2)
 
     if interactive:
         # Before setting up our own event handlers delete matplotlib's
@@ -609,7 +633,7 @@ def create_plot(pulsars, highlight=[], interactive=True, **kwargs):
         cid_keypress = fig.canvas.mpl_connect('key_press_event', keypress)
         cid_mousepress = fig.canvas.mpl_connect('button_press_event', mousepress)
         cid_pick = fig.canvas.mpl_connect('pick_event', pick)
-        plt.ion()
+        #plt.ion()
         plt.show()
 
 
