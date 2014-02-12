@@ -39,8 +39,8 @@ class Candidate(object):
         self.z = float(z)
         self.dmhits = []
 
-    def add_dmhit(self, dm, snr):
-        self.dmhits.append(DMHit(dm, snr))
+    def add_dmhit(self, dm, snr, sigma=None):
+        self.dmhits.append(DMHit(dm, snr, sigma))
 
     def __str__(self):
         cand = self.accelfile + ':' + `self.candnum`
