@@ -12,7 +12,8 @@ import re
 import types
 
 
-dmhit_re = re.compile(r'^ *DM= *(?P<dm>[^ ]*) *SNR= *(?P<snr>[^ ]*) *\** *$')
+dmhit_re = re.compile(r'^ *DM= *(?P<dm>[^ ]*) *SNR= *(?P<snr>[^ ]*) *' \
+                      r'(Sigma= *(?P<sigma>[^ ]*) *)?\** *$')
 candinfo_re = re.compile(r'^(?P<accelfile>.*):(?P<candnum>\d*) *(?P<dm>[^ ]*)' \
                          r' *(?P<snr>[^ ]*) *(?P<sigma>[^ ]*) *(?P<numharm>[^ ]*)' \
                          r' *(?P<ipow>[^ ]*) *(?P<cpow>[^ ]*) *(?P<period>[^ ]*)' \
@@ -57,12 +58,20 @@ class Candidate(object):
 class DMHit(object):
     """Object to represent a DM hit of an accelcands candidate.
     """
-    def __init__(self, dm, snr):
+    def __init__(self, dm, snr, sigma=None):
         self.dm = float(dm)
         self.snr = float(snr)
+        if sigma is not None:
+            self.sigma = float(sigma)
+        else:
+            self.sigma = None
 
     def __str__(self):
-        result = "  DM=%6.2f SNR=%5.2f" % (self.dm, self.snr)
+        if self.sigma is None:
+            result = "  DM=%6.2f SNR=%5.2f" % (self.dm, self.snr)
+        else:
+            result = "  DM=%6.2f SNR=%5.2f Sigma=%5.2f" % \
+                        (self.dm, self.snr, self.sigma)
         result += "   " + int(self.snr/3.0)*'*' + '\n'
         return result
 
