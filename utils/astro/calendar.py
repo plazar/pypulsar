@@ -7,7 +7,7 @@ Patrick Lazarus, Nov 4th, 2009
 """
 import types
 import numpy as np
-
+import datetime
 
 MONTH_TO_NUM = {'January': 1,
                 'February': 2,
@@ -71,6 +71,18 @@ def date_to_MJD(*args, **kwargs):
         so consult its documentation.
     """
     return JD_to_MJD(date_to_JD(*args, **kwargs))
+
+
+def MJDnow(gregorian=True):
+    """Return the MJD now.
+    """
+    utc = datetime.datetime.utcnow()
+    dayfrac = utc.day + (utc.hour + \
+                            (utc.minute + \
+                                (utc.second + \
+                                    (utc.microsecond) \
+                            /1.0e6)/60.0)/60.0)/24.0
+    return date_to_MJD(utc.year, utc.month, dayfrac, gregorian)
 
 
 def date_to_JD(year, month, day, gregorian=True):

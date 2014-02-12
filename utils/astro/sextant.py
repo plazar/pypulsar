@@ -26,13 +26,13 @@ def ha_from_lst(lst, ra):
 def ha_from_mjdlon(mjd, lon, ra):
     """Given Modified Julian Day (mjd), longitude (lon), right ascension (ra)
         where longitude, measured positive west and negative east from
-        Greenwich, is given in degrees and right ascension is also given
-        in degrees.
+        Greenwich, is given in degrees, and right ascension is given
+        in decimal hours.
 
-        Return value is in degrees.
+        Return value is in hours.
     """
-    mst_deg = clock.MJD_to_mstUT_deg(mjd)
-    hourangle = mst_deg - lon - ra
+    LST = clock.MJD_lon_to_LST(mjd, lon) # Result is in hours
+    hourangle = LST - ra
     return hourangle
 
 
@@ -137,10 +137,10 @@ def hadec_to_altaz(ha, decl, obslat, input="sexigesimal", output="deg"):
         decl = protractor.convert(decl, input, "rad")
 
     # Do the conversion
-    az = np.arctan2(np.sin(ha), np.cos(ha)*np.sin(obslat) - \
-                        np.tan(decl)*np.cos(obslat))
     alt = np.arcsin(np.sin(obslat)*np.sin(decl) + \
                         np.cos(obslat)*np.cos(decl)*np.cos(ha))
+    az = np.arccos((np.sin(decl) - np.sin(obslat)*np.sin(alt))/ \
+                        (np.cos(obslat)*np.cos(alt)))
 
     # Ensure radian values are between 0 and 2pi
     az = np.mod(az, np.pi*2)

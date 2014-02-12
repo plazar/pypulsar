@@ -246,9 +246,13 @@ def create_polycos(par, telescope_id, center_freq, start_mjd, end_mjd, \
     tzfile.write("%s %d %d %d %0.5f\n" % (telescope_id, max_hour_angle, \
                             SPAN_DEFAULT, NUMCOEFFS_DEFAULT, center_freq))
     # TEMPO ignores lines 2 and 3 in tz.in file
-    tzfile.write("\n\n") 
-    tzfile.write("%s %d %d %d %0.5f\n" % (par.PSR, span, \
-                        numcoeffs, max_hour_angle, center_freq)) 
+    tzfile.write("\n\n")
+    if hasattr(par, "PSR"):
+        psrname = par.PSR
+    else:
+        psrname = par.PSRJ
+    tzfile.write("%s %d %d %d %0.5f\n" % (psrname, SPAN_DEFAULT, \
+                        NUMCOEFFS_DEFAULT, max_hour_angle, center_freq)) 
     tzfile.close()
     tempo = subprocess.Popen("tempo -z -f %s" % par.FILE, shell=True, \
                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, \

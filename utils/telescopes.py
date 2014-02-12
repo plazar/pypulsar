@@ -18,7 +18,7 @@ telescope_to_id = {"GBT": '1', \
                    "Effelsberg": 'g', \
                    "WSRT": 'i', \
                    "GMRT": 'r', \
-                   "Geocenter": 'o', \
+                   "Geocenter": '0', \
                    "Barycenter": '@'}
 
 # TEMPO observatory code to Telescope name conversion
@@ -33,7 +33,7 @@ id_to_telescope = {'1': "GBT", \
                    'g': "Effelsberg", \
                    'i': "WSRT", \
                    'r': "GMRT", \
-                   'o': "Geocenter", \
+                   '0': "Geocenter", \
                    '@': "Barycenter"}
 
 # Telescope name to track length (max hour angle) conversion
