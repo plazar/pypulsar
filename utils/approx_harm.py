@@ -26,11 +26,11 @@ def approx_harm(a, b, maxsteps=20):
         x = tmp
         m.append(q[k]*m[k-1]+m[k-2])
         n.append(q[k]*n[k-1]+n[k-2])
-        print "%d/%d" % (m[k], n[k])
+        #print "%d/%d" % (m[k], n[k])
         if n[k]:
             newfrac = float(m[k])/float(n[k])
             origfrac = float(a)/float(b)
-            print origfrac, newfrac, origfrac-newfrac
+            #print origfrac, newfrac, origfrac-newfrac
             if abs(origfrac-newfrac)<0.01:
                 return m[k], n[k]
 
