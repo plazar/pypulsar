@@ -51,7 +51,8 @@ class PrestoFFT:
             freqs = np.fft.fftfreq(self.inf.N, self.inf.dt)
             self.freqs = freqs[freqs>=0]
             self.fft = self.read_fft()
-            
+            self.phases = np.angle(self.fft)
+
             self.normalisation = "raw"
             self.powers = np.abs(self.fft)**2
 
