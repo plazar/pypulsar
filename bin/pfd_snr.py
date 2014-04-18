@@ -8,6 +8,7 @@ Manually determine on-pulse region for the profile in a pfd file
 
 import sys
 import argparse
+import warnings
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -27,12 +28,13 @@ class OnPulseError(Exception):
 class Observation:
     """ Observation object
     """
-    def __init__(self, pfdfn, sefd=None):
+    def __init__(self, pfdfn, sefd=None, verbose=True):
         """Return an observation object for the given pfd file.
     
         Inputs: 
             pfdfn: a pfd filename
             sefd: the system-equivalent flux density of the observation (in Jy)
+            verbose: if True, print extra information (Default: True)
 
         Output:
             obs: The Observation object            
@@ -40,165 +42,134 @@ class Observation:
         self.fn = pfdfn
         self.sefd = sefd
         self.p = prepfold.pfd(pfdfn)
-        # RA in arcmin
-        self.ra = protractor.convert(self.p.rastr, 'hmsstr', 'deg')*60
-        # Dec in arcmin
-        self.dec = protractor.convert(self.p.decstr, 'dmsstr', 'deg')*60
         self.snr = None
-        self.width = None
+        self.smean = None
+        self.verbose = verbose
+        self.notes = []
         
         prof = self.p.bestprof.profile
+        self.nbin = len(prof)
         imax = np.argmax(prof)
         self.nrot = (imax-len(prof)/2) % len(prof)
-        print "Profile maximum at bin %d. Rotating by %d bins." % (imax, self.nrot)
-        self.prof = psr_utils.rotate(prof, self.nrot)
-
-    def get_snr(self):
-        """
-        Return signal-to-noise ratio for the pfd object.
-
-        Input: pfd - a pfd object.
-        """
+        if self.verbose:
+            print "Profile maximum at bin %d. Rotating by %d bins." % (imax, self.nrot)
+        self.prof = np.asarray(psr_utils.rotate(prof, self.nrot))
+        
+        self.region_start = None
+        self.region_start_line = None
+        self.regions = []
+        
+        # Plot
         self.fig = plt.figure()
         self.ax = plt.gca()
         plt.plot(self.prof, 'k-', drawstyle='steps-post')
-        self.cid_keypress = self.fig.canvas.mpl_connect('key_press_event', \
-                                                            self.keypress)
+        
+        # Set up triggers
         self.cid_mouseclick = self.fig.canvas.mpl_connect('button_press_event', \
                                                             self.mousepress)
-        self.rectprops = dict(facecolor='blue', edgecolor='blue', linewidth=2, \
-                                alpha=0.5, fill=True)
-        ymin, ymax = self.ax.get_ylim()
-        self.to_draw = Rectangle((0,ymin-1e10), 0, ymax-ymin+2e10, visible=False, \
-                                    **self.rectprops)
-        self.ax.add_patch(self.to_draw)
-        self.eventpress = None
-
-        plt.show()
+        self.cid_pick = self.fig.canvas.mpl_connect('pick_event', self.onpick)
+        self.cid_keypress = self.fig.canvas.mpl_connect('key_press_event', \
+                                                            self.keypress)
 
     def mousepress(self, event):
         if event.inaxes and event.button==1:
-            self.mousepressed = True
-            self.cid_mousemove = self.fig.canvas.mpl_connect('motion_notify_event', \
-                                                                self.mousemove)
-            self.cid_mouserelease = self.fig.canvas.mpl_connect('button_release_event', \
-                                                                self.mouserelease)
             self.eventpress = event
-            self.to_draw.set_visible(True)
+            if self.region_start is None:
+                # Starting a new on-pulse region
+                xx =  int(event.xdata+0.5)
+                self.region_start = xx
+                self.region_start_line = plt.axvline(xx, c='k', ls='--')
+            else:
+                # Selected an on-pulse region
+                if self.region_start > event.xdata:
+                    xlo = 0
+                    xhi = int(event.xdata+0.5)
+                    self.regions.append(plt.axvspan(xlo, xhi, picker=True,
+                                                    facecolor='b', alpha=0.5))
+                    xlo = int(self.region_start+0.5)
+                    xhi = self.nbin
+                    self.regions.append(plt.axvspan(xlo, xhi, picker=True,
+                                                    facecolor='b', alpha=0.5))
+                else:
+                    xlo = int(self.region_start+0.5)
+                    xhi = int(event.xdata+0.5)
+                    self.regions.append(plt.axvspan(xlo, xhi, picker=True,
+                                                    facecolor='b', alpha=0.5))
+                
+                # Remove line
+                self.region_start_line.remove()
+                self.region_start = None
+                self.region_start_line = None
+
             self.fig.canvas.draw()
 
-    def mousemove(self, event):
-        # update rectangle, draw
-        if event.inaxes:
-            xmin = self.eventpress.xdata
-            xmax = event.xdata
-            # Switch xmin/xmax
-            if xmin > xmax: 
-                xmin, xmax = xmax, xmin
-            if xmin < 0:
-                xmin = 0
-            if xmax > len(self.prof)-1:
-                xmax = len(self.prof)-1
-            xmin = int(np.round(xmin))
-            xmax = int(np.round(xmax))
-            self.to_draw.set_x(xmin)
-            self.to_draw.set_width(xmax-xmin)
-            self.fig.canvas.draw_idle()
-        
-    def mouserelease(self, event):
-        # remove rectangle (flash in red first for effect)
-        self.to_draw.set_facecolor('red')
-        self.to_draw.set_edgecolor('red')
-        self.fig.canvas.draw()
-        self.to_draw.set_visible(False)
-        self.fig.canvas.draw()
-        self.to_draw.set_facecolor('blue')
-        self.to_draw.set_edgecolor('blue')
-            
-        # compute snr and pulse width
-        xmin = self.eventpress.xdata
-        xmax = event.xdata
-        # Switch xmin/xmax
-        if xmin > xmax: 
-            xmin, xmax = xmax, xmin
-        if xmin < 0:
-            xmin = 0
-        if xmax > len(self.prof)-1:
-            xmax = len(self.prof)-1
-        xmin = int(np.round(xmin))
-        xmax = int(np.round(xmax))
-        self.onpulse_range = (xmin, xmax)
-        print self.onpulse_range
-        self.calc_snr()
-        self.disconnect_triggers()
+    def onpick(self, event):
+        if event.mouseevent.button==3:
+            ind = self.regions.index(event.artist)
+            self.regions.pop(ind)
+            event.artist.remove()
+            self.fig.canvas.draw()
 
     def calc_snr(self):
-        if self.onpulse_range is None:
-            raise OnPulseError("No on-pulse region selected!")
+        ionpulse = np.zeros_like(self.prof, dtype=bool)
+        for polygon in self.regions:
+            xlo, xhi = polygon.get_xy()[0:3:2,0]
+            ionpulse[xlo:xhi] = 1
+
+        nbins_selected = ionpulse.sum()
+        if nbins_selected < 1:
+            warnings.warn("No on-pulse region selected!")
+            return
         # Correct standard deviation for correlations between bins
         nbin_eff = self.p.bestprof.proflen*self.p.DOF_corr()
         std = self.p.bestprof.data_std*np.sqrt(self.p.bestprof.N/nbin_eff)
        
-        xmin, xmax = self.onpulse_range
         # Calculate S/N using eq. 7.1 from Lorimer and Kramer
-        offpulse = np.concatenate((self.prof[:xmin], \
-                                    self.prof[xmax:]))
+        offpulse = self.prof[~ionpulse]
+
         mean = offpulse.mean()
         scaled = self.prof-mean
-        #print xmin, xmax
-        #print scaled[xmin:xmax]
-        #plt.figure()
-        #plt.plot(scaled, drawstyle='steps-post')
-        #plt.show()
-        area = np.sum(scaled[xmin:xmax]) 
-        profmax = np.max(scaled[xmin:xmax])
+        area = np.sum(scaled[ionpulse]) 
+        profmax = np.max(scaled[ionpulse])
         weq = area/profmax
-        self.width = xmax-xmin
         self.snr = area/std/np.sqrt(weq)
-        print "Width selected: %d bins, %f phase" % \
-                (self.width, self.width/float(len(self.prof)))
-        if debug:
-            print "Equivalent width (bins):", weq
-            print "Std-dev corrected for correlations between phase bins:", std
-            print "Off-pulse mean:", mean
-            print "Integral under the mean-subtracted on-pulse region:", \
-                    area
-        print "SNR:", self.snr
+        if self.verbose:
+            print "Number of bins selected: %d (%f phase)" % \
+                    (nbins_selected, nbins_selected/float(len(self.prof)))
+            if debug:
+                print "Equivalent width (bins):", weq
+                print "Std-dev corrected for correlations between phase bins:", std
+                print "Off-pulse mean:", mean
+                print "Integral under the mean-subtracted on-pulse region:", \
+                        area
+            print "SNR:", self.snr
 
         if self.sefd is not None:
             npol = 2  # prepfold files only contain total-intensity
                       # (i.e. both polarisations summed)
             bw = self.p.chan_wid*self.p.numchan
-            smean = self.snr*self.sefd/np.sqrt(npol*self.p.T*bw)*np.sqrt(weq/(len(self.prof)-weq))
-            print "Mean flux density (mJy):", smean
-
-    def disconnect_triggers(self):
-        # disconnect mousemove, mouserelease and reset state
-        self.eventpress = None
-        self.mousepressed = False
-        self.fig.canvas.mpl_disconnect(self.cid_mousemove)
-        self.fig.canvas.mpl_disconnect(self.cid_mouserelease)
-
+            self.smean = self.snr*self.sefd/np.sqrt(npol*self.p.T*bw)*np.sqrt(weq/(len(self.prof)-weq))
+            if self.verbose:
+                print "Mean flux density (mJy):", self.smean
+    
     def keypress(self, event):
-        if event.key == 'enter' and self.snr is not None and \
-                self.width is not None:
-            plt.close(event.canvas.figure.number)
+        if event.key == ' ':
+            self.calc_snr()
+        elif event.key in ('q', 'Q'):
+            self.calc_snr()
+            plt.close(self.fig)
+        elif event.key in ('r', 'R'):
+            self.notes.append("RFI!")
+        elif event.key in ('n', 'N'):
+            self.notes.append("No detection!")
 
 
 def main():
     for pfdfn in args.files:
         print pfdfn
-        obs = Observation(pfdfn, sefd=args.sefd)
-        if args.on_pulse is None:
-            obs.get_snr()
-        else:
-            print args.on_pulse
-            start_bin = int(args.on_pulse[0]*len(obs.prof)-obs.nrot + 0.5) % len(obs.prof)
-            end_bin = int(args.on_pulse[1]*len(obs.prof)-obs.nrot+0.5) % len(obs.prof)
-            obs.onpulse_range = (start_bin, end_bin)
-            print "Rotated on-pulse range (bins): %d - %d" % (start_bin, end_bin)
-            obs.calc_snr()
-        print "%s \tSNR: %s" % (obs.fn, obs.snr)
+        obs = Observation(pfdfn, sefd=args.sefd, verbose=True)
+        plt.show()
+        print " ".join(obs.notes)
 
 
 if __name__ == '__main__':
