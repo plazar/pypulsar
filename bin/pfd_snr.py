@@ -47,7 +47,10 @@ class Observation:
         self.verbose = verbose
         self.notes = []
         
-        prof = self.p.bestprof.profile
+        self.p.dedisperse(doppler=True)
+        self.p.adjust_period()
+        prof = self.p.sumprof
+        self.proflen = len(prof)
         self.nbin = len(prof)
         imax = np.argmax(prof)
         self.nrot = (imax-len(prof)/2) % len(prof)
@@ -121,8 +124,9 @@ class Observation:
             warnings.warn("No on-pulse region selected!")
             return
         # Correct standard deviation for correlations between bins
-        nbin_eff = self.p.bestprof.proflen*self.p.DOF_corr()
-        std = self.p.bestprof.data_std*np.sqrt(self.p.bestprof.N/nbin_eff)
+        data_avg, data_var = self.p.stats.sum(axis=1).mean(axis=0)[1:3]
+        nbin_eff = self.proflen*self.p.DOF_corr()
+        std = np.sqrt(data_var*self.p.Nfolded/nbin_eff)
        
         # Calculate S/N using eq. 7.1 from Lorimer and Kramer
         offpulse = self.prof[~ionpulse]
