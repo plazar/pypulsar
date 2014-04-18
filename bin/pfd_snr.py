@@ -19,6 +19,8 @@ import prepfold
 import psr_utils
 
 from pypulsar.utils.astro import protractor
+from pypulsar.utils.astro import sextant
+from pypulsar.utils import skytemp
 debug = 1
 
 
@@ -28,20 +30,21 @@ class OnPulseError(Exception):
 class Observation:
     """ Observation object
     """
-    def __init__(self, pfdfn, sefd=None, verbose=True):
+    def __init__(self, pfd, sefd=None, verbose=True):
         """Return an observation object for the given pfd file.
     
         Inputs: 
-            pfdfn: a pfd filename
+            pfd: a pfd object
             sefd: the system-equivalent flux density of the observation (in Jy)
             verbose: if True, print extra information (Default: True)
 
         Output:
             obs: The Observation object            
         """
-        self.fn = pfdfn
         self.sefd = sefd
-        self.p = prepfold.pfd(pfdfn)
+        self.p = pfd 
+        self.fn = self.p.pfd_filename
+        print self.fn
         self.snr = None
         self.smean = None
         self.verbose = verbose
@@ -171,7 +174,19 @@ class Observation:
 def main():
     for pfdfn in args.files:
         print pfdfn
-        obs = Observation(pfdfn, sefd=args.sefd, verbose=True)
+        pfd = prepfold.pfd(pfdfn)
+        if args.sefd is not None:
+            sefd = args.sefd
+        elif args.gain is not None and args.tsys is not None:
+            fctr = 0.5*(pfd.hifreq+pfd.lofreq)
+            glon, glat = sextant.equatorial_to_galactic(pfd.rastr, pfd.decstr, 
+                                                        input='sexigesimal', 
+                                                        output='deg')
+            print "Galactic Coords: l=%g deg, b=%g deg" % (glon, glat)
+            tsky = skytemp.get_skytemp(glon, glat, freq=fctr)[0]
+            print "Sky temp at %g MHz: %g K" % (fctr, tsky)
+            sefd = (args.tsys+tsky)/args.gain
+        obs = Observation(pfd, sefd=sefd, verbose=True)
         plt.show()
         print " ".join(obs.notes)
 
@@ -184,6 +199,20 @@ if __name__ == '__main__':
                         help="On-pulse region. Two values should be provided, " \
                             "the starting phase and the ending phase.")
     parser.add_argument('--sefd', dest='sefd', type=float, \
-                        help="The SEFD of the observing system.")
+                        help="The SEFD (in Jy) of the observing system. "
+                             "(i.e. Tsys/Gain) Sky temperature will not be factored in.")
+    parser.add_argument('--tsys', dest='tsys', type=float, \
+                        help="The temperature of the observing system in K "
+                             "(not including sky temperature).")
+    parser.add_argument('--gain', dest='gain', type=float, \
+                        help="The gain of the observing system in K/Jy.")
     args = parser.parse_args()
+
+    if args.sefd is not None and (args.tsys is not None or args.gain is not None):
+        raise ValueError("Gain and/or system temperature should not be " 
+                         "provided if SEFD is given.")
+    elif (args.tsys is not None and args.gain is None) or \
+         (args.tsys is None and args.gain is not None):
+        raise ValueError("Both gain and system temperature must be provided " 
+                         "together.")
     main()
