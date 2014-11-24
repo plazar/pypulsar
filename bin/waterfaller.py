@@ -22,6 +22,8 @@ import rfifind
 from pypulsar.formats import filterbank
 from pypulsar.formats import spectra
 
+SWEEP_STYLES = ['r-', 'b-', 'g-', 'm-', 'c-']
+
 def get_data(fil, startsamp, N):
     """Return 2D array of data from filterbank file.
 
@@ -116,13 +118,20 @@ def main():
     plt.axis('tight')
 
     # Sweeping it up
-    if options.sweep_dm is not None:
-        ddm = options.sweep_dm-data.dm
+    for ii, sweep_dm in enumerate(options.sweep_dms):
+        ddm = sweep_dm-data.dm
         delays = psr_utils.delay_from_DM(ddm, data.freqs)
         delays -= delays.min()
         
-        sweepstart = data.dt*data.numspectra*options.sweep_posn+data.starttime
-        plt.plot(delays+sweepstart, data.freqs, 'r-', lw=4, alpha=0.5)
+        if options.sweep_posns is None:
+            sweep_posn = 0.0
+        elif len(options.sweep_posns) == 1:
+            sweep_posn = options.sweep_posns[0]
+        else:
+            sweep_posn = options.sweep_posns[ii]
+        sweepstart = data.dt*data.numspectra*sweep_posn+data.starttime
+        sty = SWEEP_STYLES[ii%len(SWEEP_STYLES)]
+        plt.plot(delays+sweepstart, data.freqs, sty, lw=4, alpha=0.5)
 
     # Dressing it up
     plt.xlabel("Time")
@@ -167,16 +176,18 @@ if __name__=='__main__':
                         help="Smooth each channel/subband with a boxcar " \
                                 "this many bins wide. (Default: Don't smooth)", \
                         default=1)
-    parser.add_option('--sweep-dm', dest='sweep_dm', type='float', \
+    parser.add_option('--sweep-dm', dest='sweep_dms', type='float', \
+                        action='append', \
                         help="Show the frequency sweep using this DM. " \
-                                "(Default: Don't show sweep)", default=None)
-    parser.add_option('--sweep-posn', dest='sweep_posn', type='float', \
+                                "(Default: Don't show sweep)", default=[])
+    parser.add_option('--sweep-posn', dest='sweep_posns', type='float', \
+                        action='append', \
                         help="Show the frequency sweep at this position. " \
                                 "The position refers to the high-frequency " \
                                 "edge of the plot. Also, the position should " \
                                 "be a number between 0 and 1, where 0 is the " \
                                 "left edge of the plot. "
-                                "(Default: 0)", default=0.0)
+                                "(Default: 0)", default=None)
     parser.add_option('--downsamp', dest='downsamp', type='int', \
                         help="Factor to downsample data by. (Default: 1).", \
                         default=1)
