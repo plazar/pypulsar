@@ -11,8 +11,10 @@ import os.path
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
+import scipy.interpolate
 
 import infodata
+import psr_utils
 
 """
 Define object.
@@ -55,6 +57,10 @@ class PrestoFFT:
 
             self.normalisation = "raw"
             self.powers = np.abs(self.fft)**2
+            self.errs = None
+
+    def close(self):
+        self.fftfile.close()
 
     def interpolate(self, r, m=32):
         """Interpolate the value of the FFT at real bin indices 'r'.
@@ -78,6 +84,167 @@ class PrestoFFT:
         interpfft = np.sum(coefs*expterm*sincterm, axis=1)
         return interpfft
 
+    def deredden(self, initialbuflen=6, maxbuflen=200):
+        # Translated code from PRESTO's 'accel_utils.py'
+        dered = np.copy(self.fft)
+        # Takes care of the DC term
+        dered[0] = 1 + 0j
+
+        # Some initial values
+        newoffset = 1
+        fixedoffset = 1
+
+        # Calculate initial values
+        mean_old = np.median(self.powers[newoffset:newoffset+initialbuflen])/np.log(2.0)
+        newoffset += initialbuflen
+        lastbuflen = initialbuflen
+        newbuflen = int(initialbuflen * np.log(newoffset))
+        if newoffset > maxbuflen:
+            newbuflen = maxbuflen
+        
+        while (newoffset + newbuflen) < len(dered):
+            # Calculate the next mean
+            mean_new = np.median(self.powers[newoffset:newoffset+newbuflen])/np.log(2.0)
+            slope = (mean_new - mean_old) / (newbuflen + lastbuflen)
+
+            # Correct the previous segment
+            ioffs = np.arange(lastbuflen) # Index offsets for this block
+            lineoffset = 0.5 * (newbuflen + lastbuflen)
+            lineval = mean_old + slope * (lineoffset - ioffs)
+            scaleval = 1.0/np.sqrt(lineval)
+            dered[fixedoffset+ioffs] *= scaleval # multiplication is done 
+                                                    # to both real and imag parts
+
+            # Update our values
+            fixedoffset += lastbuflen
+            lastbuflen = newbuflen
+            mean_old = mean_new
+            newoffset += lastbuflen
+            newbuflen = int(initialbuflen * np.log(newoffset))
+            if newbuflen > maxbuflen:
+                newbuflen = maxbuflen
+
+        # Scale the last (partial) chunk the same way as the last point
+        dered[fixedoffset:] *= scaleval[-1]
+        return dered
+
+    def estimate_power_errors(self, initialbuflen=6, maxbuflen=200, force=False):
+        if not force and (self.errs is not None):
+            return
+        # Similar to deredden
+        self.errs = np.zeros(len(self.fft))
+
+        # Some initial values
+        newoffset = 1
+        fixedoffset = 1
+
+        # Calculate initial values
+        rms_old = np.std(self.powers[newoffset:newoffset+initialbuflen])
+        newoffset += initialbuflen
+        lastbuflen = initialbuflen
+        newbuflen = int(initialbuflen * np.log(newoffset))
+        if newoffset > maxbuflen:
+            newbuflen = maxbuflen
+        
+        while (newoffset + newbuflen) < len(self.errs):
+            # Calculate the next mean
+            rms_new = np.std(self.powers[newoffset:newoffset+newbuflen])
+            slope = (rms_new - rms_old) / (newbuflen + lastbuflen)
+
+            # Correct the previous segment
+            ioffs = np.arange(lastbuflen) # Index offsets for this block
+            lineoffset = 0.5 * (newbuflen + lastbuflen)
+            lineval = rms_old + slope * (lineoffset - ioffs)
+            self.errs[fixedoffset+ioffs] =  lineval 
+
+            # Update our values
+            fixedoffset += lastbuflen
+            lastbuflen = newbuflen
+            rms_old = rms_new
+            newoffset += lastbuflen
+            newbuflen = int(initialbuflen * np.log(newoffset))
+            if newbuflen > maxbuflen:
+                newbuflen = maxbuflen
+
+        # Assign the last (partial) chunk the same error as the last point
+        self.errs[fixedoffset:] = lineval[-1]
+
+    def fit_powers(self, freqlim=None, use_errors=True, **kwargs):
+        # Use iminuit to fit power-law + DC to powers
+        import iminuit
+        if freqlim is None:
+            freqlim = np.inf
+            if self.inf.DM > 0:
+                tdm = psr_utils.dm_smear(self.inf.DM, self.inf.BW, self.inf.lofreq+0.5*self.inf.BW)
+                freqlim = 1.0/tdm
+                print "Dispersion smearing time: %.2f ms" % (1000.0*tdm)
+            freqlim = min(10.0, freqlim)
+            print "Only fitting using frequencies up to %.2f Hz" % freqlim
+        iuse = (self.freqs<freqlim)
+        iuse[0] = 0 # Always ignore zeroth element
+        
+        if use_errors:
+            # Compute power errors
+            self.estimate_power_errors()
+
+        # Define function to minimize
+        def to_minimize(amp, index, dc):
+            model = power_law(self.freqs[iuse], amp, index, dc) 
+            diff = model-self.powers[iuse]
+            #plt.figure()
+            #plt.plot(self.freqs[1:], self.powers[1:], 'r-', alpha=0.5)
+            #plt.plot(self.freqs[iuse], self.powers[iuse], 'k-', alpha=0.5)
+            #plt.plot(self.freqs[iuse], model, 'k--', lw=2)
+            #plt.xscale('log')
+            #plt.yscale('log')
+            #plt.xlabel("Freq (Hz)")
+            #plt.ylabel("Raw Power")
+            #plt.show()
+            if use_errors:
+                diff /= self.errs[iuse]
+            return np.sum(diff**2)
+
+        white = self.estimate_white_power_level(1000)
+        kwargs.setdefault('amp', 1e14)
+        kwargs.setdefault('error_amp', 1e12)
+        kwargs.setdefault('limit_amp', (0, 1e20))
+        kwargs.setdefault('index', -1.5)
+        kwargs.setdefault('error_index', .1)
+        kwargs.setdefault('limit_index', (-10.0, 0.0))
+        kwargs.setdefault('dc', white)
+        kwargs.setdefault('error_dc', white*0.1)
+        kwargs.setdefault('limit_dc', (white*0.01, np.max(self.powers[1:])))
+        m = iminuit.Minuit(to_minimize, 
+                           frontend=iminuit.ConsoleFrontend,
+                           print_level=0, **kwargs)
+        # Minimize
+        m.migrad()
+        return m.values
+
+    def estimate_white_power_level(self, minfreq=1000):
+        """Estimate the white noise level in the power spectrum.
+            This is the median of the powers above a given frequency.
+
+            Inputs:
+                minfreq: Lower frequency limit for 'white' interval.
+                    (Default: 1000 Hz)
+
+            Outputs:
+                white: The white noise level of the power spectrum.
+        """
+        return np.median(self.powers[self.freqs>minfreq])
+
+    def plot_power_fit(self, powerlaws):
+        plt.plot(self.freqs[1:], self.powers[1:], 'k-')
+        for amp, index, dc in powerlaws:
+            model = power_law(self.freqs, amp, index, dc)
+            plt.plot(self.freqs[1:], model[1:], 'r--')
+        plt.xlabel("Frequency (Hz)")
+        plt.ylabel("Power")
+        plt.xscale('log')
+        plt.yscale('log')
+        plt.show()
+
     def read_fft(self, count=-1):
         """Read 'count' powers from .fft file and return them.
             power = real*real + imag*imag
@@ -85,16 +252,17 @@ class PrestoFFT:
         fft = np.fromfile(self.fftfile, dtype=np.dtype('c8'), count=count)
         return fft
 
-    def plot(self):
+    def plot(self, **kwargs):
         """Plot the power spectrum.
         """
-        plt.plot(self.freqs, self.powers, 'k-')
+        plt.plot(self.freqs, self.powers, **kwargs)
         plt.title(self.fftfn)
         plt.xlabel("Frequency (Hz)")
         plt.ylabel("Power")
-        plt.show()
+        plt.xscale('log')
+        plt.yscale('log')
 
-    def plot_3pane(self, zapfile=None):
+    def plot_3pane(self):
         """Plot the power spectrum in 3 panes.
             If 'showzap' is True show PALFA zaplist.
         """
@@ -125,23 +293,91 @@ class PrestoFFT:
         maxpwr = np.max(self.powers[(self.freqs>=1) & (self.freqs<1000)])
         axones.set_ylim(0, maxpwr*1.1)
 
-        if zapfile is not None:
-            # Plot regions that are zapped
-            zaplist = np.loadtxt(zapfile)
-            for freq, width in zaplist:
-                for ax in (axones, axtens, axhundreds):
-                    r = matplotlib.patches.Rectangle((freq-width/2.0, 0), width, maxpwr*1.1, \
-                                                fill=True, fc='b', ec='none', \
-                                                alpha=0.25, zorder=-1)
-                    ax.add_patch(r)
-            plt.figtext(0.025, 0.03, "Zaplist file: %s" % zapfile, size="xx-small")
-
         plt.suptitle("Power Spectrum (%s)" % self.fftfn)
 
-        def close(event):
-            if event.key in ('q','Q'):
-                plt.close()
-        fig.canvas.mpl_connect("key_press_event", close)
+    def plot_zaplist(self, zapfile, fc='b', ec='none', 
+                     alpha=0.25, zorder=-1, **kwargs):
+        # Plot regions that are zapped
+        zaplist = np.loadtxt(zapfile)
+        ax = plt.gca()
+        for freq, width in zaplist:
+            plt.axvspan(freq-width/2.0, freq+width/2.0, \
+                        fill=True, fc=fc, ec=ec, \
+                        alpha=alpha, zorder=zorder, **kwargs)
+        plt.figtext(0.025, 0.03, "Zaplist file: %s" % zapfile, size="xx-small")
 
-        plt.show()
- 
+
+def power_law(freqs, amp, index, dc):
+    rednoise = amp*freqs**index
+    return rednoise + dc
+
+
+def get_smear_response(ddm, **obs):
+    if ddm != 0:
+        bw = obs['chan_width']*obs['numchan']
+        fhi = obs['lofreq']+bw
+        smear = smearing_function(obs['lofreq'], fhi, ddm, obs.get('bandpass', None))
+        times = np.arange(obs['N'])*obs['dt']
+        weights = smear(times)
+        weights /= np.sum(weights)
+
+        freqs = np.fft.fftfreq(obs['N'], obs['dt'])
+        freqs = freqs[freqs>=0]
+        fft = np.fft.rfft(weights)[:len(freqs)]
+        response = scipy.interpolate.interp1d(freqs, (np.abs(fft))**2)
+    else:
+        response = lambda freq: 1
+    return response
+    
+
+def smearing_function(flo, fhi, ddm, bandpass=None):
+    """Return function that returns the kernel used to smear data due to a wrong DM
+
+        Inputs:
+            flo: Low frequency of observing band (MHz)
+            fhi: High frequency of observing band (MHz)
+            ddm: Difference in DM with respect to the DM of the signal (pc/cc)
+
+        Output:
+            smear: A function that returns the smearing kernel.
+    """
+    if bandpass is not None:
+        freqs = np.linspace(flo,fhi, len(bandpass))
+        delay = 4.15e3*ddm*(freqs**-2 - fhi**-2)
+        isort = np.argsort(delay)
+        bandpass[~np.isfinite(bandpass)] = 0
+        interp = scipy.interpolate.interp1d(delay[isort], bandpass[isort], 
+                                            bounds_error=False, fill_value=0)
+    else:
+        interp = lambda time: 1
+
+    tmax = 4.15e3*ddm*(flo**-2 - fhi**-2)
+    def smear(times):
+        weights = interp(times)/np.sqrt(times/4.15e3/ddm + fhi**-2)/(2*4.15e3*ddm)
+        if tmax > 0:
+            weights[(times<0) | (tmax<times)] = 0
+        else:
+            weights[(times<tmax) | (0<times)] = 0
+        return weights
+    return smear
+
+
+def main():
+    pfftfn = sys.argv[1]
+    pfft = PrestoFFT(pfftfn)
+
+    fig = plt.figure()
+    pfft.plot(c='k', lw=0.5)
+    if len(sys.argv) > 2:
+        zapfn = sys.argv[2]
+        pfft.plot_zaplist(zapfn)
+
+    def close(event):
+        if event.key in ('q','Q'):
+            plt.close()
+    fig.canvas.mpl_connect("key_press_event", close)
+    plt.show()
+
+
+if __name__ == '__main__':
+    main()
