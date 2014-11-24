@@ -15,20 +15,23 @@ import sigproc
 
 class filterbank:
     def __init__(self, filfn):
+        self.filename = filfn
+        self.already_read_header = False
+        self.header_params = []
+        self.header = {}
+        self.header_size = None # size of header in bytes
+        self.data_size = None
+        self.number_of_samples = None
+        self.dtype = None
         if not os.path.isfile(filfn):
             raise ValueError("ERROR: File does not exist!\n\t(%s)" % filfn)
         else:
-            self.filename = filfn
-            self.already_read_header = False
-            self.header_params = []
-            self.header = {}
-            self.header_size = None # size of header in bytes
-            self.data_size = None
-            self.number_of_samples = None
-            self.dtype = None
             self.filfile = open(filfn, 'rb')
             self.read_header()
             self.compute_frequencies()
+            
+    def __getattr__(self, name):
+        return self.header[name]
 
     def close(self):
         self.filfile.close()
@@ -60,9 +63,6 @@ class filterbank:
             if self.data_size % bytes_per_sample:
                 warnings.warn("Not an integer number of samples in file.")
             self.number_of_samples = self.data_size / bytes_per_sample
-
-    def __getattr__(self, name):
-        return self.header[name]
 
     def print_header(self):
         """Print header parameters and values.
