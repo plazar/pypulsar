@@ -15,12 +15,14 @@ http://code.google.com/p/healpy/
 """
 
 import sys
+import os.path
 
 import healpy
 import numpy as np
 import matplotlib.pyplot as plt
 
-HASLAM_MAP_FILENAME = "lambda_haslam408_dsds.fits"
+HASLAM_MAP_FILENAME = os.path.join(os.path.dirname(__file__),
+                            "..","lib","lambda_haslam408_dsds.fits")
 
 HASLAM_FREQ = 408.0 # MHz
 SYNCHROTRON_INDEX = -2.7
@@ -83,13 +85,23 @@ def show_temp_map(freq=HASLAM_FREQ, index=SYNCHROTRON_INDEX, min=None, max=None,
         Mark coordinates provided in 'galcoords'. Entries in list should
         be tuples = (l,b). l and b should be given in degrees.
     """
-    healpy.mollview(change_obsfreq(HASLAM_MAP, HASLAM_FREQ, freq, index), \
-                        min=min, max=max, unit='K', \
-                        title="All-sky map at %gMHz. " \
-                                "Haslam et al. (1982) from LAMBDA." % freq)
-    if galcoords:
-        l,b = np.array(galcoords).transpose()
-        healpy.projscatter(l, b, lonlat=True, marker='x', s=50, lw=1.5)
+    gal_long = np.linspace(180, -180, 1000)
+    gal_lat = np.linspace(-90, 90, 500)
+    gl, gb = np.meshgrid(gal_long, gal_lat)
+    temps = get_skytemp(gl, gb, freq=freq, index=index)
+    ax = plt.axes(projection='mollweide')
+    plt.imshow(np.log10(temps),extent=(-np.pi, np.pi, -np.pi/2, np.pi/2), aspect=0.5, 
+               origin='bottom', cmap=plt.get_cmap('gnuplot2'))
+    plt.setp(ax.xaxis.get_ticklabels(), visible=False)
+    plt.setp(ax.yaxis.get_ticklabels(), visible=False)
+    plt.grid(True)
+    #healpy.mollview(change_obsfreq(HASLAM_MAP, HASLAM_FREQ, freq, index), \
+    #                    min=min, max=max, unit='K', \
+    #                    title="All-sky map at %gMHz. " \
+    #                            "Haslam et al. (1982) from LAMBDA." % freq)
+    #if galcoords:
+    #    l,b = np.array(galcoords).transpose()
+    #    healpy.projscatter(l, b, lonlat=True, marker='x', s=50, lw=1.5)
     def keypress(event):
         if event.key in ('q', 'Q'):
             plt.close()
