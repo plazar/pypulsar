@@ -76,9 +76,8 @@ def dmsstr_to_rad(dmsstr):
                 float(d['min'])/60.0 + \
                 float(d['sec'])/3600.0
 
-        degs[i] = deg
+        degs[i] = sign*deg
 
-    degs = sign*degs
     return deg_to_rad(degs)
 
 
