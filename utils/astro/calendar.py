@@ -8,6 +8,9 @@ Patrick Lazarus, Nov 4th, 2009
 import types
 import numpy as np
 import datetime
+import pytz
+
+UTC_TZ = pytz.timezone('utc')
 
 MONTH_TO_NUM = {'January': 1,
                 'February': 2,
@@ -471,3 +474,45 @@ def MJD_to_datestring(MJD):
             MJD
     """
     return date_to_string(*MJD_to_date(MJD))
+
+
+def datetime_to_MJD(dt, gregorian=True):
+    """Given a datetime.datetime object return the corresponding
+        MJD. This function will check the timezone of the datetime
+        object and find the corresponding UTC time. If the datetime
+        object does not have any timezone info UTC will be assumed.
+
+        Input:
+            dt: Datetime object.
+            gregorian:  - True for Gregorian calendar (Default)
+                        - False for Julian calendar
+
+        Outputs:
+            MJD
+    """
+    if dt.tzinfo is not None:
+        dtutc = dt.astimezone(UTC_TZ)
+    else:
+        dtutc = dt
+    dayfrac = dtutc.day + (dtutc.hour + \
+                            (dtutc.minute + \
+                                (dtutc.second + \
+                                    (dtutc.microsecond) \
+                            /1.0e6)/60.0)/60.0)/24.0
+    return date_to_MJD(dtutc.year, dtutc.month, dayfrac, gregorian)
+
+
+def MJD_to_datetime(mjd):
+    """Given an MJD return a datetime.datetime object for the same instant.
+
+        Input:
+            mjd: The modified Julian date.
+
+        Output:
+            dt: The corresponding datetime object.
+    """
+    yyyy, mm, dd = MJD_to_date(mjd)
+    dayfrac = dd % 1
+
+    dt = datetime.datetime(yyyy, mm, int(dd)) + datetime.timedelta(days=dayfrac)
+    return dt
