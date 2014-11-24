@@ -7,7 +7,7 @@ using matplotlib and numpy
           Patrick Lazarus, Sept 13th, 2009
 """
 
-import optparse
+import argparse
 import sys
 import re
 import os
@@ -15,6 +15,7 @@ import os.path
 import types
 import warnings
 
+import matplotlib.ticker
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -391,6 +392,11 @@ def plot_data(pulsars, hightlight=[], binaries=False, rrats=False, \
     plt.rc(('xtick.major', 'ytick.major'), size=8)
     plt.rc(('xtick.minor', 'ytick.minor'), size=4)
     draw_lines(bsurfs, edots, ages)
+    #loc = matplotlib.ticker.LogLocator()
+    #loc.numticks=6
+    #plt.gca().yaxis.set_major_locator(loc)
+    plt.yticks([1e-21, 1e-18, 1e-15, 1e-12, 1e-9])
+    #leg = plt.legend(loc='lower right')
 
     print "Plot Inventory:"
     print "\tNumber of pulsars:", (periods.size + numhl)
@@ -420,16 +426,16 @@ def draw_lines(bfields=[], edots=[], ages=[], show_labels=True):
         plt.plot(plimits, pdot_from_age(plimits, age), 'k-.', lw=2)
     for edot in edots:
         plt.plot(plimits, pdot_from_edot(plimits, edot), 'k:', lw=2)
-#        label = "%g" % edot
-#        if "e+" in label:
-#            coef, e, pow = label.partition("e+")
-#            if coef != "1":
-#                label = r"$%s \times 10^{%s} erg/s$" % (coef, pow)
-#            else:
-#                label = r"$10^{%s} erg/s$" % pow
-#        else:
-#            label = r"$%s erg/s$" % label
-#        plt.text(0.1,0.1, label, transform = plt.gca().transAxes, picker=PICKER)
+        #label = "%g" % edot
+        #if "e+" in label:
+        #    coef, e, pow = label.partition("e+")
+        #    if coef != "1":
+        #        label = r"$%s \times 10^{%s} erg/s$" % (coef, pow)
+        #    else:
+        #        label = r"$10^{%s} erg/s$" % pow
+        #else:
+        #    label = r"$%s erg/s$" % label
+        #plt.text(0.1,0.1, label, transform = plt.gca().transAxes, picker=PICKER)
     plt.xlim(plimits)
     plt.ylim(pdotlimits)
     
@@ -441,7 +447,7 @@ def quit():
 
 def savefigure(savefn='./ppdot.png'):
     print "Saving plot to %s" % savefn
-    plt.savefig(savefn, orientation='landscape', papertype='letter')
+    plt.savefig(savefn, orientation='landscape', papertype='letter', facecolor='none')
 
 
 def mousepress(event):
@@ -615,7 +621,8 @@ def create_plot(pulsars, highlight=[], interactive=True, **kwargs):
         magnetars - boolean, intial state for marking magnetars on the plot
         snrs - boolean, intial state for marking snrs on the plot
     """
-    fig = plt.figure(figsize=(11,8.5))
+    #fig = plt.figure(figsize=(11,8.5))
+    fig = plt.figure()
     fig.canvas.set_window_title("P-Pdot")
     plot_data(pulsars, highlight, **kwargs)
     
@@ -733,27 +740,27 @@ def parse_pulsar_file(psrfn='pulsars.txt', indent=""):
     return pulsars
 
 
-def parse_options():
-    (options, sys.argv) = parser.parse_args()
-    if options.def_lines:
-        options.edots = [1e30, 1e33, 1e36]
-        options.bsurfs = [1e10, 1e12, 1e14]
-        options.ages = [1e3, 1e6, 1e9]
-    return options
+def parse_args():
+    args = parser.parse_args()
+    if args.def_lines:
+        args.edots = [1e30, 1e33, 1e36]
+        args.bsurfs = [1e10, 1e12, 1e14]
+        args.ages = [1e3, 1e6, 1e9]
+    return args
 
 
 def main():
     global pulsars
     global highlight
-    options = parse_options()
+    args = parse_args()
     highlight = []
-    if options.files:
+    if args.files:
         pulsars = []
-        for file in options.files:
+        for file in args.files:
             pulsars += parse_pulsar_file(file)
     else:
         pulsars = parse_pulsar_file()
-    for hl in options.highlight:
+    for hl in args.highlight:
         highlight += parse_pulsar_file(hl)
 
     # Eliminate duplicate pulsars, based on name
@@ -765,16 +772,15 @@ def main():
             del psr_dict[hl.name]
     pulsars = psr_dict.values()
     if len(pulsars)+len(highlight):
-        create_plot(pulsars, highlight, binaries=options.binaries, \
-                magnetars=options.magnetars, rrats=options.rrats, \
-                snrs=options.snrs, edots=options.edots, ages=options.ages, \
-                bsurfs=options.bsurfs)
-
+        create_plot(pulsars, highlight, binaries=args.binaries, \
+                magnetars=args.magnetars, rrats=args.rrats, \
+                snrs=args.snrs, edots=args.edots, ages=args.ages, \
+                bsurfs=args.bsurfs)
 
 
 if __name__=='__main__':
-    parser = optparse.OptionParser()
-    parser.add_option('-f', '--file', dest='files', type='string', \
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-f', '--file', dest='files', type=str, \
                         action='append', help="File containing a list "
                         "of pulsars to display with ATNF catalogue. "
                         "Each pulsar should be on a separate row with "
@@ -783,47 +789,46 @@ if __name__=='__main__':
                         "\nEach column should contain a single string "
                         "(no space), and '*' should be used as a null value.", \
                         default=[])
-    parser.add_option('--highlight', dest='highlight', type='string', \
+    parser.add_argument('--highlight', dest='highlight', type=str, \
                         action='append', help="File containing a list "
                         "of pulsars to display with ATNF catalogue. "
                         "These pulsars will be highlighed (displayed "
                         "with a star instead of a point). See -f/--file "
                         "option for formatting.", default=[])
-    parser.add_option('-e', '--edot', dest='edots', type='float', \
+    parser.add_argument('-e', '--edot', dest='edots', type=float, \
                         action='append', help="Value, in erg/s, to plot "
                         "a line of constant E-dot. Multiple -e/--edot options "
                         "can be provided.", default=[])
-    parser.add_option('-a', '--age', dest='ages', type='float', \
+    parser.add_argument('-a', '--age', dest='ages', type=float, \
                         action='append', help="Value, in yr, to plot "
                         "a line of constant age. Multiple -a/--age options "
                         "can be provided.", default=[])
-    parser.add_option('-b', '--bsurf', dest='bsurfs', type='float', \
+    parser.add_argument('-b', '--bsurf', dest='bsurfs', type=float, \
                         action='append', help="Value, in G, to plot "
                         "a line of constant surface B-field. Multiple "
                         "-b/--bsurf options can be provided.", \
                         default=[])
-    parser.add_option('--def-lines', dest='def_lines', action='store_true', \
+    parser.add_argument('--def-lines', dest='def_lines', action='store_true', \
                         help="Plot default lines\n"
                         "E-dot (erg/s): 1e30, 1e33, 1e36\n"
                         "B-field (G): 1e10, 1e12, 1e14\n"
-                        "Age (yr): 1e3, 1e6, 1e9", default=False)
-    parser.add_option('--binaries', dest='binaries', action='store_true', \
+                        "Age (yr): 1e3, 1e6, 1e9")
+    parser.add_argument('--binaries', dest='binaries', action='store_true', \
                         help="Mark binary pulsars. This is the initial state, "
                         "binary marking can be toggled interactively. "
-                        "(Default: Don't distinguish binaries.)", \
-                        default=False)
-    parser.add_option('--rrats', dest='rrats', action='store_true', \
+                        "(Default: Don't distinguish binaries.)")
+    parser.add_argument('--rrats', dest='rrats', action='store_true', \
                         help="Mark RRATs. This is the initial state, RRAT "
                         "marking can be toggled interactively. (Default: "
-                        "Don't distinguish RRATs.)", default=False)
-    parser.add_option('--magnetars', dest='magnetars', \
+                        "Don't distinguish RRATs.)")
+    parser.add_argument('--magnetars', dest='magnetars', \
                         action='store_true', help="Mark magnetars. This "
                         "is the initial state, magnetar marking can be "
                         "toggled interactively. (Default: Don't distinguish "
-                        "magnetars.)", default=False)
-    parser.add_option('--snrs', dest='snrs', action='store_true', \
+                        "magnetars.)")
+    parser.add_argument('--snrs', dest='snrs', action='store_true', \
                         help="Mark supernova remnant associations. This "
                         "is the initial state, SNR marking can be toggled "
                         "interactively. (Default: Don't distinguish SNR "
-                        "associations.)", default=False)
+                        "associations.)")
     main()
