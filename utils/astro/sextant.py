@@ -222,11 +222,10 @@ def equatorial_to_galactic(ra, decl, input="sexigesimal", output="deg", \
                     np.cos(decl)*np.cos(decl_north)*np.cos(ra_north-ra))
 
     # Ensure radian values are between 0 and 2pi
-    l = np.mod(l, np.pi*2)
-    b = np.mod(b, np.pi*2)
+    l = np.atleast_1d(np.mod(l, np.pi*2))
+    b = np.atleast_1d(np.mod(b, np.pi*2))
 
-    if b > np.pi:
-        b -= np.pi*2
+    b[b > np.pi] -= np.pi*2
 
     # Convert output values to desired units
     if output == "sexigesimal":
@@ -234,7 +233,7 @@ def equatorial_to_galactic(ra, decl, input="sexigesimal", output="deg", \
     l = protractor.convert(l, "rad", output)
     b = protractor.convert(b, "rad", output)
 
-    return (l, b)
+    return (l.squeeze(), b.squeeze())
 
 
 def precess_B1950_to_J2000(ra, decl, input="sexigesimal", output="sexigesimal"):
