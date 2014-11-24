@@ -25,6 +25,7 @@ class Datfile:
             self.datfile = open(datfn, 'r')
             self.inffn = "%s.inf" % self.basefn
             self.infdata = infodata.infodata(self.inffn)
+            self.inf = self.infdata
             # Corrections need to be applied to data from .inf file
             correct_infdata(self.infdata)
         else:
