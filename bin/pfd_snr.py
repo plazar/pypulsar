@@ -20,6 +20,7 @@ import psr_utils
 
 from pypulsar.utils.astro import protractor
 from pypulsar.utils.astro import sextant
+from pypulsar.utils import estimate_snr
 from pypulsar.utils import skytemp
 debug = 1
 
@@ -44,7 +45,6 @@ class Observation:
         self.sefd = sefd
         self.p = pfd 
         self.fn = self.p.pfd_filename
-        print self.fn
         self.snr = None
         self.smean = None
         self.verbose = verbose
@@ -52,7 +52,10 @@ class Observation:
         
         self.p.dedisperse(doppler=True)
         self.p.adjust_period()
-        prof = self.p.sumprof
+        if self.p.bestprof:
+            prof = self.p.bestprof.profile
+        else:
+            prof = self.p.sumprof
         self.proflen = len(prof)
         self.nbin = len(prof)
         imax = np.argmax(prof)
@@ -138,13 +141,13 @@ class Observation:
         scaled = self.prof-mean
         area = np.sum(scaled[ionpulse]) 
         profmax = np.max(scaled[ionpulse])
-        weq = area/profmax
-        self.snr = area/std/np.sqrt(weq)
+        self.weq = area/profmax
+        self.snr = area/std/np.sqrt(self.weq)
         if self.verbose:
             print "Number of bins selected: %d (%f phase)" % \
                     (nbins_selected, nbins_selected/float(len(self.prof)))
             if debug:
-                print "Equivalent width (bins):", weq
+                print "Equivalent width (bins):", self.weq
                 print "Std-dev corrected for correlations between phase bins:", std
                 print "Off-pulse mean:", mean
                 print "Integral under the mean-subtracted on-pulse region:", \
@@ -155,7 +158,7 @@ class Observation:
             npol = 2  # prepfold files only contain total-intensity
                       # (i.e. both polarisations summed)
             bw = self.p.chan_wid*self.p.numchan
-            self.smean = self.snr*self.sefd/np.sqrt(npol*self.p.T*bw)*np.sqrt(weq/(len(self.prof)-weq))
+            self.smean = self.snr*self.sefd/np.sqrt(npol*self.p.T*bw)*np.sqrt(self.weq/(len(self.prof)-self.weq))
             if self.verbose:
                 print "Mean flux density (mJy):", self.smean
     
@@ -186,6 +189,12 @@ def main():
             tsky = skytemp.get_skytemp(glon, glat, freq=fctr)[0]
             print "Sky temp at %g MHz: %g K" % (fctr, tsky)
             sefd = (args.tsys+tsky)/args.gain
+        print sefd, args.fwhm, args.sep
+        if (sefd is not None) and (args.fwhm is not None) and (args.sep is not None):
+            factor = estimate_snr.airy_pattern(args.fwhm, args.sep)
+            print "Pulsar is off-centre"
+            print "Reducing SEFD by factor of %g (SEFD: %g->%g)" % (factor, sefd, sefd/factor)
+            sefd /= factor
         obs = Observation(pfd, sefd=sefd, verbose=True)
         plt.show()
         print " ".join(obs.notes)
@@ -206,6 +215,13 @@ if __name__ == '__main__':
                              "(not including sky temperature).")
     parser.add_argument('--gain', dest='gain', type=float, \
                         help="The gain of the observing system in K/Jy.")
+    parser.add_argument('--sep', dest='sep', type=float, \
+                        help="The angular separation, in arcmin, between the "
+                             "beam centre and the pulsar. This reduces the "
+                             "effective gain of the observation by assuming "
+                             "an Airy disk. (The --fwhm option must also be provided.)")
+    parser.add_argument('--fwhm', dest='fwhm', type=float, \
+                        help="The FWHM of the beam's Airy disk pattern, in arcmin.")
     args = parser.parse_args()
 
     if args.sefd is not None and (args.tsys is not None or args.gain is not None):
