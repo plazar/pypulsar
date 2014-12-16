@@ -13,6 +13,8 @@ import os.path
 import numpy as np
 import sigproc
 
+from pypulsar.formats import spectra
+
 class filterbank:
     def __init__(self, filfn):
         self.filename = filfn
@@ -135,3 +137,20 @@ class filterbank:
         beginning of file.
         """
         self.filfile.seek(posn)
+    
+    def get_spectra(self, startsamp, N):
+        """Return 2D array of data from filterbank file.
+ 
+            Inputs:
+                startsamp: Starting sample
+                N: number of samples to read
+ 
+            Output:
+                data: 2D numpy array
+        """
+        self.seek_to_sample(startsamp)
+        data = self.read_Nsamples(N)
+        data.shape = (N, self.header['nchans'])
+        return spectra.Spectra(self.frequencies, self.tsamp, data.T, \
+                                starttime=self.tsamp*startsamp, dm=0)
+
