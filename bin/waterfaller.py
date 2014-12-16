@@ -24,7 +24,7 @@ from pypulsar.formats import spectra
 
 SWEEP_STYLES = ['r-', 'b-', 'g-', 'm-', 'c-']
 
-def get_data(fil, startsamp, N):
+def get_filterbank_data(fil, startsamp, N):
     """Return 2D array of data from filterbank file.
 
         Inputs:
@@ -39,7 +39,37 @@ def get_data(fil, startsamp, N):
     data = fil.read_Nsamples(N)
     data.shape = (N, fil.header['nchans'])
     return spectra.Spectra(fil.frequencies, fil.tsamp, data.T, \
-                            starttime=options.start, dm=0)
+                            starttime=fil.tsamp*startsamp, dm=0)
+
+
+def get_psrfits_data(pfits, startsamp, N):
+    """Return 2D array of data from PSRFITS file.
+
+        Inputs:
+            pfits: PsrfitsFile object.
+            startsamp, Starting sample
+            N: number of samples to read
+
+        Output:
+            data: 2D numpy array
+    """
+    # Calculate starting subint and ending subint
+    startsub = int(startsamp/pfits.nsamp_per_subint)
+    ntrim_start = startsamp - (startsub*pfits.nsamp_per_subint)
+    endsub = int((startsamp+N)/pfits.nsamp_per_subint)
+    ntrim_end = ((endsub+1)*pfits.nsamp_per_subint) - (startsamp+N)
+    # Read data
+    data = pfits.read_subint(startsub)
+    for isub in xrange(startsub+1, endsub+1):
+        tmp = pfits.read_subint(isub)
+        data = np.concatenate([data, tmp])
+    # Truncate data to desired interval
+    data = data[ntrim_start:]
+    # Trim from end of array only if necessary
+    if ntrim_end > 0:
+        data = data[:-ntrim_end]
+    return spectra.Spectra(pfits.freqs, pfits.tsamp, data, \
+                           starttime=pfits.tsamp*startsamp, dm=0)
 
 
 def get_mask(rfimask, startsamp, N):
@@ -66,9 +96,18 @@ def get_mask(rfimask, startsamp, N):
         
 
 def main():
-    # Read filterbank file
-    fil = filterbank.filterbank(args[0])
-    
+    fn = args[0]
+    if fn.endswith(".fil"):
+        # Filterbank file
+        filetype = "filterbank"
+        rawdatafile = filterbank.filterbank(fn)
+        get_data = get_filterbank_data
+    elif fn.endswith(".fits"):
+        # PSRFITS file
+        filetype = "psrfits"
+        rawdatafile = psrfits.PsrfitsFile(fn)
+        get_data = get_psrfits_data
+
     # Read data
     start_bin = np.round(options.start/fil.tsamp).astype('int')
     if options.nbins is None:
@@ -78,11 +117,11 @@ def main():
     if options.maskfile is not None:
         rfimask = rfifind.rfifind(options.maskfile) 
         mask = get_mask(rfimask, start_bin, nbins)
-        data = get_data(fil, start_bin, nbins)
+        data = get_data(rawdatafile, start_bin, nbins)
         # Mask data
         data = data.masked(mask, maskval='median-mid80')
     else:
-        data = get_data(fil, start_bin, nbins)
+        data = get_data(rawdatafile, start_bin, nbins)
 
     # Subband data
     if (options.nsub is not None) and (options.subdm is not None):
