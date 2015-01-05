@@ -69,7 +69,7 @@ class Observation:
         self.regions = []
         
         # Plot
-        self.fig = plt.figure()
+        self.fig = plt.gcf()
         self.ax = plt.gca()
         plt.plot(self.prof, 'k-', drawstyle='steps-post')
         
