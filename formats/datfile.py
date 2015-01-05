@@ -95,7 +95,7 @@ class Datfile:
         block = self.read_Tseconds(span)
         xx = []
         meds = []
-        while block:
+        while block is not None:
             iend = istart + len(block)
             xx.append(0.5*(istart+iend))
             meds.append(np.median(block))
