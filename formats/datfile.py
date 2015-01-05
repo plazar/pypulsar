@@ -100,7 +100,7 @@ class Datfile:
             xx.append(0.5*(istart+iend))
             meds.append(np.median(block))
             istart = iend
-            self.read_Tseconds(span)
+            block = self.read_Tseconds(span)
     
         spline = interp.InterpolatedUnivariateSpline(xx, meds, bbox=(0,iend))
         return spline
