@@ -87,7 +87,7 @@ class Datfile:
                 span: The time span for blocks, in seconds (Default: 1s)
             
             Output:
-                split: The spline
+                spline: The spline object representing the baseline.
         """
         self.rewind()
 
@@ -105,6 +105,42 @@ class Datfile:
         spline = interp.InterpolatedUnivariateSpline(xx, meds, bbox=(0,iend))
         return spline
 
+
+    def write_debaselined(self, span=1.0):
+        """Write time series with baseline removed.
+
+            Input:
+                span: The time span for blocks, in seconds (Default: 1s)
+            
+            Output:
+                outfn: The name of the output file.
+        """
+        outbase = "%.debasline" % self.basefn 
+        spline = self.get_baseline_spline(span)
+        self.rewind()
+        data = self.read_all()
+        nout = len(data)-span/2.0/self.inf.dt
+        data = data[:nout]
+        xs = np.arange(nout)
+        baseline = spline(xs)
+        (data-baseline).tofile(outbase+".dat")
+
+        # Create inf file.
+        with open(self.inffn, 'r') as inffile, open(outbase+".inf", 'w') as outfile:
+            for line in inffile:
+                if not line.strip():
+                    continue
+                if line.startswith(" Data file name"):
+                    outfile.write(" Data file name without suffix          =  %s\n" % outbase)
+                elif line.startswith(" Number of bins "):
+                    outfile.write(" Number of bins in the time series      =  %d\n" % nout)
+                else:
+                    outfile.write(line)
+            outfile.write("    Baseline was removed with 'datafile.py' (by Patrick Lazarus) using a block duration of %g s\n" % span)
+                    
+        return outbase+'.dat'
+
+    
     def read_Nsamples(self, N):
         """Read N samples from datfile and return a numpy array
             of the data, or None if there aren't N samples of
