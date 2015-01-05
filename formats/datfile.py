@@ -115,7 +115,7 @@ class Datfile:
             Output:
                 outfn: The name of the output file.
         """
-        outbase = "%.debasline" % self.basefn 
+        outbase = "%s.debasline" % self.basefn 
         spline = self.get_baseline_spline(span)
         self.rewind()
         data = self.read_all()
