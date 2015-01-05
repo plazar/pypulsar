@@ -7,7 +7,10 @@ Patrick Lazarus, June 16, 2009
 """
 
 import os.path
+
 import numpy as np
+import scipy.interpolate as interp
+
 import psr_utils
 import infodata
 import pulse
@@ -73,6 +76,34 @@ class Datfile:
         self.currtime_desired += T
         self.currmjd_desired += T / float(psr_utils.SECPERDAY)
 
+
+    def get_baseline_spline(self, span=1.0):
+        """Get spline representation of baseline.
+            Split time series into blocks and calculate the median of
+            each block. interpolate between median values using
+            a spline.
+
+            Input:
+                span: The time span for blocks, in seconds (Default: 1s)
+            
+            Output:
+                split: The spline
+        """
+        self.rewind()
+
+        istart = 0
+        block = self.read_Tseconds(span)
+        xx = []
+        meds = []
+        while block:
+            iend = istart + len(block)
+            xx.append(0.5*(istart+iend))
+            meds.append(np.median(block))
+            istart = iend
+            self.read_Tseconds(span)
+    
+        spline = interp.InterpolatedUnivariateSpline(xx, meds, bbox=(0,iend))
+        return spline
 
     def read_Nsamples(self, N):
         """Read N samples from datfile and return a numpy array
