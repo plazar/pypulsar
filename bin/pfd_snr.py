@@ -9,6 +9,7 @@ Manually determine on-pulse region for the profile in a pfd file
 import sys
 import argparse
 import warnings
+import os.path
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -90,13 +91,20 @@ class ObservationWithModel:
         self.smean = None
         self.verbose = verbose
         self.notes = []
-        self.on_pulse = set()
 
         # Read model
         self.modelfn = modelfn
         self.modelparams = injectpsr.parse_model_file(self.modelfn)
         self.modelcomps = injectpsr.create_vonmises_components(self.modelparams)
 
+        # Read on-pulse components
+        if os.path.exists(self.modelfn+".on"):
+            self.read_onpulse_from_file = True
+            ionpulse = np.loadtxt(self.modelfn+".on")
+            self.on_pulse = set([int(xx) for xx in np.atleast_1d(ionpulse)])
+        else:
+            self.read_onpulse_from_file = False
+            self.on_pulse = set()
         self.p.dedisperse(doppler=True)
         self.p.adjust_period()
         if self.p.bestprof:
@@ -118,7 +126,7 @@ class ObservationWithModel:
         plt.title("Profile")
         
         # Individual components
-        self.modelax = plt.subplot(3,1,2)
+        self.modelax = plt.subplot(3,1,2, sharey=self.profax)
         binphase = 1.0/self.nbin
         # Central phase of each bin
         phases = np.linspace(0, 1, self.nbin, endpoint=False) + 0.5*binphase
@@ -135,11 +143,14 @@ class ObservationWithModel:
         self.comp_maxes = []
         for ii, vm in enumerate(self.modelcomps):
             compdata = vm(phases)
-            transformed = transform(compdata, rot, scale, dc)
-            self.compartists.append(plt.plot(transformed, ls='-', drawstyle='steps', 
-                                             picker=True, label="Comp. #%d" % ii)[0])
-            self.comp_sums.append(np.sum(transformed-dc))
-            self.comp_maxes.append(np.max(transformed-dc))
+            transformed = transform(compdata, rot, scale, 0)
+            lw = 1+int(ii in self.on_pulse)
+            self.compartists.append(plt.plot(transformed+dc, ls='-', 
+                                             drawstyle='steps', 
+                                             lw=lw, picker=True, 
+                                             label="Comp. #%d" % ii)[0])
+            self.comp_sums.append(np.sum(transformed))
+            self.comp_maxes.append(np.max(transformed))
         plt.legend(loc='best', prop=dict(size='x-small'))
         modeldata = transform(modeldata, rot, scale, dc)
         
@@ -174,6 +185,11 @@ class ObservationWithModel:
             return
         area = 0
         profmax = 0 
+        if not self.read_onpulse_from_file:
+            with open(self.modelfn+".on", 'w') as ff:
+                ff.write("#On-pulse components:\n")
+                for ionpulse in self.on_pulse:
+                    ff.write("%d\n" % ionpulse)
         for ionpulse in self.on_pulse:
             area += self.comp_sums[ionpulse]
             profmax = max(profmax, self.comp_maxes[ionpulse])
