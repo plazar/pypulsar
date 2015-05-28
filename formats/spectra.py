@@ -253,7 +253,7 @@ class Spectra(object):
         if trim:
             ntrim = max(rel_bindelays)
             if ntrim > 0:
-                self.data = self.data[:,-ntrim]
+                self.data = self.data[:,:-ntrim]
                 self.numspectra -= ntrim
 
     def smooth(self, width=1, padval=0):
