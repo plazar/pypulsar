@@ -177,7 +177,7 @@ def main():
     rawdatafile = open_data_file(fn)
 
     if options.dm:
-        dmtime = psr_utils.delay_from_DM(options.dm, np.min(data.freqs))
+        dmtime = psr_utils.delay_from_DM(options.dm, np.min(rawdatafile.freqs))
 
     data = get_data(rawdatafile, start=options.start, duration=options.duration+dmtime,
                     mask=options.maskfile)
