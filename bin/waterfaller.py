@@ -110,7 +110,7 @@ def prepare_data(data, smooth=1, downsamp=1, dm=0, nsub=None,
 
     # Dedisperse
     if dm:
-        data.dedisperse(dm, padval='mean')
+        data.dedisperse(dm, padval='mean', trim=True)
 
     # Downsample
     if downsamp > 1:
@@ -176,7 +176,10 @@ def main():
     fn = args[0]
     rawdatafile = open_data_file(fn)
 
-    data = get_data(rawdatafile, start=options.start, duration=options.duration,
+    if options.dm:
+        dmtime = psr_utils.delay_from_DM(options.dm, np.min(data.freqs))
+
+    data = get_data(rawdatafile, start=options.start, duration=options.duration+dmtime,
                     mask=options.maskfile)
 
     data = prepare_data(data, options.width_bins, options.downsamp, options.dm,
