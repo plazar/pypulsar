@@ -17,7 +17,7 @@ import sys
 import argparse
 
 import pyslalib.slalib as slalib
-import pyfits
+import astropy.io.fits as pyfits
 import numpy as np
 import psr_utils
 from pypulsar.utils.astro import protractor
