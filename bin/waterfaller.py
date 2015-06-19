@@ -100,7 +100,7 @@ def get_data(rawdatafile, start, duration=None, nbins=None, mask=None):
 
 
 def prepare_data(data, smooth=1, downsamp=1, dm=0, nsub=None, 
-                 subdm=None, scaleindep=False):
+                 subdm=None, scaleindep=False, noscale=False):
     # Subband data
     if (nsub is None):
         nsub = data.numchans
@@ -117,13 +117,25 @@ def prepare_data(data, smooth=1, downsamp=1, dm=0, nsub=None,
         data.downsample(downsamp)
 
     # scale data
-    data = data.scaled(scaleindep)
+    if not noscale:
+        data = data.scaled(scaleindep)
     
     # Smooth
     if smooth > 1:
         data.smooth(smooth, padval='mean')
     return data
 
+def plot_spectra(data, cmap='gist_yarg'):
+    plt.imshow(data.data, aspect='auto', \
+                cmap=matplotlib.cm.cmap_d[cmap], \
+                interpolation='nearest', origin='upper', \
+                extent=(data.starttime, data.starttime+data.numspectra*data.dt, \
+                        data.freqs.min(), data.freqs.max()))
+
+
+def plot_timeseries(data):
+    times = np.arange(0, data.numspectra)*data.dt + data.starttime
+    plt.plot(times, data.data.sum(axis=0), 'k-')
 
 def plot(data, cmap='gist_yarg', show_cb=False, sweep_dms=None, sweep_posns=None):
     if sweep_dms is None:
@@ -132,11 +144,8 @@ def plot(data, cmap='gist_yarg', show_cb=False, sweep_dms=None, sweep_posns=None
         sweep_posns = []
 
     ax = plt.axes((0.15, 0.15, 0.8, 0.7))
-    plt.imshow(data.data, aspect='auto', \
-                cmap=matplotlib.cm.cmap_d[cmap], \
-                interpolation='nearest', origin='upper', \
-                extent=(data.starttime, data.starttime+data.numspectra*data.dt, \
-                        data.freqs.min(), data.freqs.max()))
+    plot_spectra(data, cmap=cmap)
+
     if show_cb:
         cb = plt.colorbar()
         cb.set_label("Scaled signal intensity (arbitrary units)")
@@ -164,12 +173,14 @@ def plot(data, cmap='gist_yarg', show_cb=False, sweep_dms=None, sweep_posns=None
     #plt.suptitle("Frequency vs. Time")
     
     sumax = plt.axes((0.15, 0.85, 0.8, 0.1), sharex=ax)
-    times = np.arange(0, data.numspectra)*data.dt + data.starttime
-    plt.plot(times, data.data.sum(axis=0), 'k-')
+    plot_timeseries(data)
     plt.setp(sumax.get_xticklabels()+sumax.get_yticklabels(), visible=False)
     plt.ylabel("Intensity")
-    
+    plt.ticklabel_format(style='plain', useOffset=False)
+
     plt.axis('tight')
+
+    return sumax, ax
 
 
 def main():
