@@ -8,7 +8,7 @@ import os.path
 import numpy as np
 import matplotlib.pyplot as plt
 
-import polycos
+import mypolycos as polycos
 import psr_utils
 from pypulsar import utils
 
