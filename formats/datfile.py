@@ -23,6 +23,7 @@ class Datfile:
     def __init__(self, datfn, dtype=DTYPE):
         self.datfn = datfn
         self.dtype = np.dtype(dtype)
+        self.bytes_per_sample = self.dtype.itemsize
         if self.datfn.endswith(".dat"):
             self.basefn = self.datfn[:-4]
             self.datfile = open(datfn, 'r')
@@ -44,8 +45,9 @@ class Datfile:
     def __str__(self):
         string_repr = "%s:\n" % self.origfn
         string_repr += "\tCurrent sample: %d\n" % self.currsample
-        string_repr += "\tCurrent desired MJD: %0.15f\n" % self.currmjd_desired
-        string_repr += "\tCurrent actual MJD: %0.15f\n" % self.currmjd_actual
+        if hasattr(self.infdata, 'epoch'):
+            string_repr += "\tCurrent desired MJD: %0.15f\n" % self.currmjd_desired
+            string_repr += "\tCurrent actual MJD: %0.15f\n" % self.currmjd_actual
         string_repr += "\tCurrent desired time: %0.9f\n" % self.currtime_desired
         string_repr += "\tCurrent actual time: %0.9" % self.currtime_actual
         return string_repr
@@ -63,18 +65,27 @@ class Datfile:
             return None
         else:
             self.currsample = new_curr_sample
-            self.currmjd_actual += self.infdata.dt * N / \
-                                    float(psr_utils.SECPERDAY)
+            if hasattr(self.infdata, 'epoch'):
+                self.currmjd_actual += self.infdata.dt * N / \
+                                        float(psr_utils.SECPERDAY)
             self.currtime_actual += self.infdata.dt * N
             return np.fromfile(self.datfile, dtype=self.dtype, count=N)
-        
+       
+    def __seek(self, N):
+        self.datfile.seek(N*self.bytes_per_sample)
+        self.currsample = N
+        if hasattr(self.infdata, 'epoch'):
+            self.currmjd_actual = self.infdata.dt * N / \
+                                        float(psr_utils.SECPERDAY)
+        self.currtime_actual = self.infdata.dt * N
         
     def __update_desired_time(self, T):
         """Private method:
             Update current desired time and MJD
         """
         self.currtime_desired += T
-        self.currmjd_desired += T / float(psr_utils.SECPERDAY)
+        if hasattr(self.infdata, 'epoch'):
+            self.currmjd_desired += T / float(psr_utils.SECPERDAY)
 
 
     def get_baseline_spline(self, span=1.0):
@@ -152,6 +163,16 @@ class Datfile:
             self.__update_desired_time(N * self.infdata.dt)
         return data
 
+    def seek_to(self, T):
+        self.rewind()
+        # Compute number of samples to read
+        endsample = np.round((self.currtime_desired+T)/self.infdata.dt)
+        sample_num = int(endsample-self.currsample)
+        self.__seek(sample_num)
+        self.currtime_desired = T
+        if hasattr(self.infdata, 'epoch'):
+            self.currmjd_desired = self.infdata.epoch + T / float(psr_utils.SECPERDAY)
+        return sample_num
 
     def read_Tseconds(self, T):
         """Read T seconds worth of data from datfile and return
@@ -187,10 +208,11 @@ class Datfile:
         self.currtime_actual = 0.0
         # Desired current time (keep track of requests given in seconds)
         self.currtime_desired = 0.0
-        # Actual current MJD (incremented by integer number of samples)
-        self.currmjd_actual = self.infdata.epoch
-        # Desired current MJD (keep track of requests)
-        self.currmjd_desired = self.infdata.epoch
+        if hasattr(self.infdata, 'epoch'):
+            # Actual current MJD (incremented by integer number of samples)
+            self.currmjd_actual = self.infdata.epoch
+            # Desired current MJD (keep track of requests)
+            self.currmjd_desired = self.infdata.epoch
 
 
     def pulses(self, period_at_mjd, time_to_skip=0.0):
@@ -202,6 +224,8 @@ class Datfile:
             observation. (First pulse period after skip is
             still called pulse #1)
         """
+        if not hasattr(self.infdata, 'epoch'):
+            raise NotImplementedError("Cannot use 'pulses(...)' if there is no MJD in inf file")
         # Initialize
         self.rewind()
         if time_to_skip > 0.0:
