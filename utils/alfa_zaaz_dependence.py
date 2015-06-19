@@ -87,6 +87,8 @@ def zaaz_func_factory(params):
                 parameters.
     """
     def zaaz_func(za, az=None):
+        za = np.atleast_1d(za)
+        za = np.clip(za, params['start_za'], params['stop_za'])
         scaledza = (za - params['ref_za'])/params['halfspan_za']
 
         poly = np.polyval(params['poly_coeffs'][::-1], scaledza)
@@ -94,8 +96,8 @@ def zaaz_func_factory(params):
         cos = params['cos_coeffs']*np.cos(angles)
         sin = params['sin_coeffs']*np.sin(angles)
         vals = poly+np.sum(cos, axis=1)+np.sum(sin, axis=1)
-        vals[(za < params['start_za']) | (za > params['stop_za'])] = params['default']
-        return vals
+        #vals[(za < params['start_za']) | (za > params['stop_za'])] = params['default']
+        return np.squeeze(vals)
     return zaaz_func
 
 
