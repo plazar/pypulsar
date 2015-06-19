@@ -69,10 +69,48 @@ def find_scale_and_phase(profdata, modeldata):
     return fit
 
 
+def read_gaussfitfile(gaussfitfile, proflen):
+    """
+    read_gaussfitfile(gaussfitfile, proflen):
+        Read a Gaussian-fit file as created by the output of pygaussfit.py.
+            The input parameters are the name of the file and the number of
+            bins to include in the resulting template file.  A numpy array
+            of that length is returned.
+
+    Originally from PRESTO's psr_utils.py
+    """
+    phass = []
+    ampls = []
+    fwhms = []
+    const = 0
+    for line in open(gaussfitfile):
+        if line.lstrip().startswith("phas"):
+            phass.append(float(line.split()[2]))
+        if line.lstrip().startswith("ampl"):
+            ampls.append(float(line.split()[2]))
+        if line.lstrip().startswith("fwhm"):
+            fwhms.append(float(line.split()[2]))
+        if line.lstrip().startswith("const"):
+            const = float(line.split()[2])
+    if not (len(phass) == len(ampls) == len(fwhms)):
+        print "Number of phases, amplitudes, and FWHMs are not the same in '%s'!"%gaussfitfile
+        return 0.0
+    phass = np.asarray(phass)
+    ampls = np.asarray(ampls)
+    fwhms = np.asarray(fwhms)
+    
+    gauss_data = np.zeros((len(ampls), proflen))
+    for ii in range(len(ampls)):
+        data = ampls[ii]*psr_utils.gaussian_profile(proflen, phass[ii], fwhms[ii])
+        dc = np.min(data)
+        const += dc
+        gauss_data[ii] = data - dc
+    return gauss_data, const
+
 class ObservationWithModel:
     """ ObservationWithModel object
     """
-    def __init__(self, pfd, modelfn, sefd=None, verbose=True):
+    def __init__(self, pfd, modelfn, sefd=None, verbose=True, bw=None):
         """Return an observation object for the given pfd file.
     
         Inputs: 
@@ -80,6 +118,7 @@ class ObservationWithModel:
             modelfn: the name of a file containing profile component parameters
             sefd: the system-equivalent flux density of the observation (in Jy)
             verbose: if True, print extra information (Default: True)
+            bw: The bandwidth of the observation in MHz. (Default: determine from pfd file)
 
         Output:
             obs: The ObservationWithModel object            
@@ -90,21 +129,20 @@ class ObservationWithModel:
         self.snr = None
         self.smean = None
         self.verbose = verbose
+        if bw is not None:
+            self.bw = bw
+        else:
+            self.bw = self.p.chan_wid*self.p.numchan
         self.notes = []
+        self.on_pulse = set()
+        self.ignore_regions = []
 
         # Read model
         self.modelfn = modelfn
         self.modelparams = injectpsr.parse_model_file(self.modelfn)
         self.modelcomps = injectpsr.create_vonmises_components(self.modelparams)
 
-        # Read on-pulse components
-        if os.path.exists(self.modelfn+".on"):
-            self.read_onpulse_from_file = True
-            ionpulse = np.loadtxt(self.modelfn+".on")
-            self.on_pulse = set([int(xx) for xx in np.atleast_1d(ionpulse)])
-        else:
-            self.read_onpulse_from_file = False
-            self.on_pulse = set()
+        to_ignore = self.read_onpulse_file(self.modelfn+".on")
         self.p.dedisperse(doppler=True)
         self.p.adjust_period()
         if self.p.bestprof:
@@ -118,15 +156,8 @@ class ObservationWithModel:
         self.region_start = None
         self.region_start_line = None
         self.regions = []
-        
-        # Plot
-        self.fig = plt.gcf()
-        self.profax = plt.subplot(3,1,1)
-        plt.plot(self.prof, 'k-', drawstyle='steps-post')
-        plt.title("Profile")
-        
-        # Individual components
-        self.modelax = plt.subplot(3,1,2, sharey=self.profax)
+       
+        # Create components
         binphase = 1.0/self.nbin
         # Central phase of each bin
         phases = np.linspace(0, 1, self.nbin, endpoint=False) + 0.5*binphase
@@ -134,10 +165,20 @@ class ObservationWithModel:
         for vm in self.modelcomps:
             compdata = vm(phases)
             modeldata += compdata
+
+        # Fit individual analytic components to profile
         params, fitcode = find_scale_and_phase(self.prof, modeldata)
-        
         scale, dc = params
         rot = get_rotation(self.prof, modeldata, scale)
+        
+        # Plot
+        self.fig = plt.gcf()
+        self.profax = plt.subplot(3,1,1)
+        plt.plot(self.prof-dc, 'k-', drawstyle='steps-post')
+        plt.title("Profile")
+        
+        # Individual components
+        self.modelax = plt.subplot(3,1,2, sharey=self.profax)
         self.compartists = []
         self.comp_sums = []
         self.comp_maxes = []
@@ -145,7 +186,7 @@ class ObservationWithModel:
             compdata = vm(phases)
             transformed = transform(compdata, rot, scale, 0)
             lw = 1+int(ii in self.on_pulse)
-            self.compartists.append(plt.plot(transformed+dc, ls='-', 
+            self.compartists.append(plt.plot(transformed, ls='-', 
                                              drawstyle='steps', 
                                              lw=lw, picker=True, 
                                              label="Comp. #%d" % ii)[0])
@@ -159,11 +200,39 @@ class ObservationWithModel:
         self.residuals = self.prof - modeldata
         plt.plot(self.residuals, c='#444444', ls='-', drawstyle='steps-post')
         plt.axhline(0, c='k', ls='--')
-        
+        for xlo, xhi in to_ignore:
+            self.regions.append(self.residax.axvspan(xlo, xhi, picker=True,
+                                            facecolor='r', alpha=0.5))
+            
+
         # Set up triggers
         self.cid_pick = self.fig.canvas.mpl_connect('pick_event', self.onpick)
         self.cid_keypress = self.fig.canvas.mpl_connect('key_press_event', \
                                                             self.keypress)
+        self.cid_mousepress = self.fig.canvas.mpl_connect('button_press_event', \
+                                                            self.mousepress)
+    
+    def read_onpulse_file(self, fn):
+        # Read on-pulse components
+        to_ignore = []
+        if os.path.exists(fn):
+            self.read_onpulse_from_file = True
+            with open(fn, 'r') as ff:
+                for line in ff:
+                    line, sep, comment = line.partition('#')
+                    line = line.strip()
+                    if not line:
+                        continue
+
+                    if line.startswith("ignore:"):
+                        xlo, xhi = line.split()[1:3]
+                        to_ignore.append((int(xlo), int(xhi)))
+                    else:
+                        self.on_pulse.add(int(line))
+        else:
+            self.read_onpulse_from_file = False
+        self.read_onpulse_from_file = True
+        return to_ignore
 
     def onpick(self, event):
         if (event.mouseevent.inaxes == self.modelax) and \
@@ -178,18 +247,27 @@ class ObservationWithModel:
                 self.on_pulse.add(ind)
                 event.artist.set_linewidth(2)
             self.fig.canvas.draw()
+        elif (event.mouseevent.inaxes == self.residax) and \
+                    (event.mouseevent.button == 3): 
+            ind = self.regions.index(event.artist)
+            self.regions.pop(ind)
+            event.artist.remove()
+            self.fig.canvas.draw()
 
     def calc_snr(self):
         if len(self.on_pulse) < 1:
             warnings.warn("No on-pulse region selected!")
             return
         area = 0
-        profmax = 0 
-        if not self.read_onpulse_from_file:
+        profmax = 0
+        if self.on_pulse or self.regions:
             with open(self.modelfn+".on", 'w') as ff:
                 ff.write("#On-pulse components:\n")
                 for ionpulse in self.on_pulse:
                     ff.write("%d\n" % ionpulse)
+                for polygon in self.regions:
+                    xlo, xhi = polygon.get_xy()[0:3:2,0]
+                    ff.write("ignore: %d %d\n" % (xlo, xhi))
         for ionpulse in self.on_pulse:
             area += self.comp_sums[ionpulse]
             profmax = max(profmax, self.comp_maxes[ionpulse])
@@ -198,8 +276,12 @@ class ObservationWithModel:
         #data_avg, data_var = self.p.stats.sum(axis=1).mean(axis=0)[1:3]
         #nbin_eff = self.proflen*self.p.DOF_corr()
         #std = np.sqrt(data_var*self.p.Nfolded/nbin_eff)
-        
-        std = np.std(self.residuals)
+       
+        iignore = np.zeros_like(self.residuals, dtype=bool)
+        for polygon in self.regions:
+            xlo, xhi = polygon.get_xy()[0:3:2,0]
+            iignore[xlo:xhi] = 1
+        std = np.std(self.residuals[~iignore])
         std /= self.p.DOF_corr()
        
         # Calculate S/N using eq. 7.1 from Lorimer and Kramer
@@ -217,10 +299,263 @@ class ObservationWithModel:
         if self.sefd is not None:
             npol = 2  # prepfold files only contain total-intensity
                       # (i.e. both polarisations summed)
-            bw = self.p.chan_wid*self.p.numchan
-            self.smean = self.snr*self.sefd/np.sqrt(npol*self.p.T*bw)*np.sqrt(self.weq/(len(self.prof)-self.weq))
+            self.smean = self.snr*self.sefd/np.sqrt(npol*self.p.T*self.bw)*np.sqrt(self.weq/(len(self.prof)-self.weq))
             if self.verbose:
                 print "Mean flux density (mJy):", self.smean
+    
+    def mousepress(self, event):
+        if (event.inaxes == self.residax) and event.button==1:
+            self.eventpress = event
+            if self.region_start is None:
+                # Starting a new ignore region
+                xx =  int(event.xdata+0.5)
+                self.region_start = xx
+                self.region_start_line = plt.axvline(xx, c='k', ls='--')
+            else:
+                # Selected an on-pulse region
+                if self.region_start > event.xdata:
+                    xlo = 0
+                    xhi = int(event.xdata+0.5)
+                    self.regions.append(self.residax.axvspan(xlo, xhi, picker=True,
+                                                    facecolor='r', alpha=0.5))
+                    xlo = int(self.region_start+0.5)
+                    xhi = self.nbin
+                    self.regions.append(self.residax.axvspan(xlo, xhi, picker=True,
+                                                    facecolor='r', alpha=0.5))
+                else:
+                    xlo = int(self.region_start+0.5)
+                    xhi = int(event.xdata+0.5)
+                    self.regions.append(self.residax.axvspan(xlo, xhi, picker=True,
+                                                    facecolor='r', alpha=0.5))
+                
+                # Remove line
+                self.region_start_line.remove()
+                self.region_start = None
+                self.region_start_line = None
+
+            self.fig.canvas.draw()
+    
+    def keypress(self, event):
+        if event.key == ' ':
+            self.calc_snr()
+        elif event.key in ('q', 'Q'):
+            self.calc_snr()
+            plt.close(self.fig)
+        elif event.key in ('r', 'R'):
+            self.notes.append("RFI!")
+        elif event.key in ('n', 'N'):
+            self.notes.append("No detection!")
+
+
+class ObservationWithGauss:
+    """ ObservationWithGauss object
+    """
+    def __init__(self, pfd, gaussfn, sefd=None, verbose=True, bw=None):
+        """Return an observation object for the given pfd file.
+    
+        Inputs: 
+            pfd: a pfd object
+            gaussfn: the name of a file containing profile component parameters
+            sefd: the system-equivalent flux density of the observation (in Jy)
+            verbose: if True, print extra information (Default: True)
+            bw: The bandwidth of the observation in MHz. (Default: determine from pfd file)
+
+        Output:
+            obs: The ObservationWithModel object            
+        """
+        self.sefd = sefd
+        self.p = pfd 
+        self.fn = self.p.pfd_filename
+        self.snr = None
+        self.smean = None
+        self.verbose = verbose
+        if bw is not None:
+            self.bw = bw
+        else:
+            self.bw = self.p.chan_wid*self.p.numchan
+        self.notes = []
+        self.on_pulse = set()
+        self.ignore_regions = []
+
+        self.p.dedisperse(doppler=True)
+        self.p.adjust_period()
+        if self.p.bestprof:
+            prof = self.p.bestprof.profile
+        else:
+            prof = self.p.sumprof
+        self.proflen = len(prof)
+        self.nbin = len(prof)
+        self.prof = np.asarray(prof)
+        
+        self.region_start = None
+        self.region_start_line = None
+        self.regions = []
+       
+        # Read gaussians file
+        self.gaussfn = gaussfn
+        self.gauss_data, dc = read_gaussfitfile(self.gaussfn, self.nbin)
+        modeldata = np.sum(self.gauss_data, axis=0)+dc
+        to_ignore = self.read_onpulse_file(self.gaussfn+".on")
+
+        # Plot
+        self.fig = plt.gcf()
+        self.profax = plt.subplot(3,1,1)
+        plt.plot(self.prof-dc, 'k-', drawstyle='steps-post')
+        plt.title("Profile")
+        
+        # Individual components
+        self.modelax = plt.subplot(3,1,2, sharey=self.profax)
+        self.compartists = []
+        self.comp_sums = []
+        self.comp_maxes = []
+        for ii, gauss in enumerate(self.gauss_data):
+            lw = 1+int(ii in self.on_pulse)
+            self.compartists.append(plt.plot(gauss, ls='-', 
+                                             drawstyle='steps-pre', 
+                                             lw=lw, picker=True, 
+                                             label="Comp. #%d" % ii)[0])
+            self.comp_sums.append(np.sum(gauss))
+            self.comp_maxes.append(np.max(gauss))
+        plt.legend(loc='best', prop=dict(size='x-small'))
+        
+        # Plot residuals
+        self.residax = plt.subplot(3,1,3)
+        self.residuals = self.prof - modeldata
+        plt.plot(self.residuals, c='#444444', ls='-', drawstyle='steps-post')
+        plt.axhline(0, c='k', ls='--')
+        for xlo, xhi in to_ignore:
+            self.regions.append(self.residax.axvspan(xlo, xhi, picker=True,
+                                            facecolor='r', alpha=0.5))
+            
+        # Set up triggers
+        self.cid_pick = self.fig.canvas.mpl_connect('pick_event', self.onpick)
+        self.cid_keypress = self.fig.canvas.mpl_connect('key_press_event', \
+                                                            self.keypress)
+        self.cid_mousepress = self.fig.canvas.mpl_connect('button_press_event', \
+                                                            self.mousepress)
+    
+    def read_onpulse_file(self, fn):
+        # Read on-pulse components
+        to_ignore = []
+        if os.path.exists(fn):
+            self.read_onpulse_from_file = True
+            with open(fn, 'r') as ff:
+                for line in ff:
+                    line, sep, comment = line.partition('#')
+                    line = line.strip()
+                    if not line:
+                        continue
+
+                    if line.startswith("ignore:"):
+                        xlo, xhi = line.split()[1:3]
+                        to_ignore.append((int(xlo), int(xhi)))
+                    else:
+                        self.on_pulse.add(int(line))
+        else:
+            self.read_onpulse_from_file = False
+        self.read_onpulse_from_file = True
+        return to_ignore
+
+    def onpick(self, event):
+        if (event.mouseevent.inaxes == self.modelax) and \
+                    (event.mouseevent.button == 1):
+            ind = self.compartists.index(event.artist)
+            if ind in self.on_pulse:
+                print "Component %d un-selected" % ind
+                self.on_pulse.remove(ind)
+                event.artist.set_linewidth(1)
+            else:
+                print "Component %d selected as on-pulse" % ind
+                self.on_pulse.add(ind)
+                event.artist.set_linewidth(2)
+            self.fig.canvas.draw()
+        elif (event.mouseevent.inaxes == self.residax) and \
+                    (event.mouseevent.button == 3): 
+            ind = self.regions.index(event.artist)
+            self.regions.pop(ind)
+            event.artist.remove()
+            self.fig.canvas.draw()
+
+    def calc_snr(self):
+        if len(self.on_pulse) < 1:
+            warnings.warn("No on-pulse region selected!")
+            return
+        area = 0
+        profmax = 0
+        if self.on_pulse or self.regions:
+            with open(self.gaussfn+".on", 'w') as ff:
+                ff.write("#On-pulse components:\n")
+                for ionpulse in self.on_pulse:
+                    ff.write("%d\n" % ionpulse)
+                for polygon in self.regions:
+                    xlo, xhi = polygon.get_xy()[0:3:2,0]
+                    ff.write("ignore: %d %d\n" % (xlo, xhi))
+        for ionpulse in self.on_pulse:
+            area += self.comp_sums[ionpulse]
+            profmax = max(profmax, self.comp_maxes[ionpulse])
+        
+        # Correct standard deviation for correlations between bins
+        #data_avg, data_var = self.p.stats.sum(axis=1).mean(axis=0)[1:3]
+        #nbin_eff = self.proflen*self.p.DOF_corr()
+        #std = np.sqrt(data_var*self.p.Nfolded/nbin_eff)
+       
+        iignore = np.zeros_like(self.residuals, dtype=bool)
+        for polygon in self.regions:
+            xlo, xhi = polygon.get_xy()[0:3:2,0]
+            iignore[xlo:xhi] = 1
+        std = np.std(self.residuals[~iignore])
+        std /= self.p.DOF_corr()
+       
+        # Calculate S/N using eq. 7.1 from Lorimer and Kramer
+        self.weq = area/profmax
+        self.snr = area/std/np.sqrt(self.weq)
+        if self.verbose:
+            if debug:
+                print "Equivalent width (bins):", self.weq
+                print "Std-dev correction factor:", self.p.DOF_corr()
+                print "Std-dev corrected for correlations between phase bins:", std
+                print "Integral under the selected pulse components:", \
+                        area
+            print "SNR:", self.snr
+
+        if self.sefd is not None:
+            npol = 2  # prepfold files only contain total-intensity
+                      # (i.e. both polarisations summed)
+            self.smean = self.snr*self.sefd/np.sqrt(npol*self.p.T*self.bw)*np.sqrt(self.weq/(len(self.prof)-self.weq))
+            if self.verbose:
+                print "Mean flux density (mJy):", self.smean
+    
+    def mousepress(self, event):
+        if (event.inaxes == self.residax) and event.button==1:
+            self.eventpress = event
+            if self.region_start is None:
+                # Starting a new ignore region
+                xx =  int(event.xdata+0.5)
+                self.region_start = xx
+                self.region_start_line = plt.axvline(xx, c='k', ls='--')
+            else:
+                # Selected an on-pulse region
+                if self.region_start > event.xdata:
+                    xlo = 0
+                    xhi = int(event.xdata+0.5)
+                    self.regions.append(self.residax.axvspan(xlo, xhi, picker=True,
+                                                    facecolor='r', alpha=0.5))
+                    xlo = int(self.region_start+0.5)
+                    xhi = self.nbin
+                    self.regions.append(self.residax.axvspan(xlo, xhi, picker=True,
+                                                    facecolor='r', alpha=0.5))
+                else:
+                    xlo = int(self.region_start+0.5)
+                    xhi = int(event.xdata+0.5)
+                    self.regions.append(self.residax.axvspan(xlo, xhi, picker=True,
+                                                    facecolor='r', alpha=0.5))
+                
+                # Remove line
+                self.region_start_line.remove()
+                self.region_start = None
+                self.region_start_line = None
+
+            self.fig.canvas.draw()
     
     def keypress(self, event):
         if event.key == ' ':
@@ -337,7 +672,7 @@ class Observation:
             return
         # Correct standard deviation for correlations between bins
         data_avg, data_var = self.p.stats.sum(axis=1).mean(axis=0)[1:3]
-        print data_var
+        #print data_var
         nbin_eff = self.proflen*self.p.DOF_corr()
         std = np.sqrt(data_var*self.p.Nfolded/nbin_eff)
        
@@ -404,6 +739,8 @@ def main():
             sefd /= factor
         if args.model_file is not None:
             obs = ObservationWithModel(pfd, args.model_file, sefd=sefd, verbose=True)
+        elif args.gauss_file is not None:
+            obs = ObservationWithGauss(pfd, args.gauss_file, sefd=sefd, verbose=True)
         else:
             obs = Observation(pfd, sefd=sefd, verbose=True)
         plt.show()
@@ -435,6 +772,11 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--model-file', dest='model_file', type=str, 
                         default=None,
                         help="A paas-created .m file containing parameters " 
+                             "describing components fit to the profile.")
+    parser.add_argument('-g', '--gaussian-file', dest='gauss_file', type=str, 
+                        default=None,
+                        help="A pygaussfit.py created gaussians file "
+                             "containing parameters " 
                              "describing components fit to the profile.")
     args = parser.parse_args()
 
