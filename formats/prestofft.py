@@ -7,6 +7,8 @@ Read PRESTO .fft file.
 import sys
 import warnings
 import os.path
+import argparse
+import types
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -25,8 +27,10 @@ inf file
 plot method
 """
 
+COLOURS = ['r', 'b', 'g', 'm', 'c', 'y']
+
 class PrestoFFT:
-    def __init__(self, fftfn, inffn=None):
+    def __init__(self, fftfn, inffn=None, maxfreq=None):
         """PrestoFFT object creator
             'fftfn' is filename of .fft file
             'inffn' is filename of .inf file
@@ -52,7 +56,13 @@ class PrestoFFT:
 
             freqs = np.fft.fftfreq(self.inf.N, self.inf.dt)
             self.freqs = freqs[freqs>=0]
-            self.fft = self.read_fft()
+            if maxfreq is not None:
+                ntoread = np.sum(self.freqs<maxfreq)
+                self.inf.N = ntoread
+                self.freqs = self.freqs[:ntoread]
+            else:
+                ntoread = -1
+            self.fft = self.read_fft(count=ntoread)
             self.phases = np.angle(self.fft)
 
             self.normalisation = "raw"
@@ -83,6 +93,58 @@ class PrestoFFT:
         sincterm = np.sinc(np.pi*(r[:,np.newaxis]-k))
         interpfft = np.sum(coefs*expterm*sincterm, axis=1)
         return interpfft
+
+    def harmonic_sum(self, nharm=8):
+        """Return the harmonically summed powers.
+
+            Inputs:
+                nharm: The number of harmonics to sum.
+
+            Outputs:
+                harmsummed: The harmonically summed powers.
+        """
+        nn = self.fft.size
+        harmsummed = np.copy(self.powers[:nn/nharm])
+
+        for nh in xrange(2, nharm+1):
+            harmsummed += np.reshape(self.powers[:nn/nh*nh], (-1, nh))[:,0][:nn/nharm]
+        return harmsummed
+
+    def incoherent_harmonic_sum(self, nharm=8):
+        """Return the harmonically summed FFT.
+
+            Inputs:
+                nharm: The number of harmonics to sum.
+
+            Outputs:
+                harmsummed: The harmonically summed FFT.
+                freqs: The frequencies of each bin.
+        """
+        nn = self.fft.size
+        harmsummed = np.copy(self.powers)
+        
+        for nh in xrange(2, 1+nharm):
+            r = np.arange(nn)/float(nh)
+            harmsummed += np.abs(self.interpolate(r, 2))**2
+        return harmsummed, self.freqs/float(nharm)
+
+    def coherent_harmonic_sum(self, nharm=8):
+        """Return the harmonically summed FFT.
+
+            Inputs:
+                nharm: The number of harmonics to sum.
+
+            Outputs:
+                harmsummed: The harmonically summed FFT.
+                freqs: The frequencies of each bin.
+        """
+        nn = self.fft.size
+        harmsummed = np.copy(self.fft)
+        
+        for nh in xrange(2, 1+nharm):
+            r = np.arange(nn)/float(nh)
+            harmsummed += self.interpolate(r, 2)
+        return np.abs(harmsummed)**2, self.freqs/float(nharm)
 
     def deredden(self, initialbuflen=6, maxbuflen=200):
         # Translated code from PRESTO's 'accel_utils.py'
@@ -213,7 +275,8 @@ class PrestoFFT:
         kwargs.setdefault('limit_index', (-10.0, 0.0))
         kwargs.setdefault('dc', white)
         kwargs.setdefault('error_dc', white*0.1)
-        kwargs.setdefault('limit_dc', (white*0.01, np.max(self.powers[1:])))
+        #kwargs.setdefault('limit_dc', (white*0.01, np.max(self.powers[1:])))
+        kwargs.setdefault('fix_dc', True)
         m = iminuit.Minuit(to_minimize, 
                            frontend=iminuit.ConsoleFrontend,
                            print_level=0, **kwargs)
@@ -235,15 +298,17 @@ class PrestoFFT:
         return np.median(self.powers[self.freqs>minfreq])
 
     def plot_power_fit(self, powerlaws):
-        plt.plot(self.freqs[1:], self.powers[1:], 'k-')
-        for amp, index, dc in powerlaws:
+        #plt.plot(self.freqs[1:], self.powers[1:], 'k-')
+        for ii, (amp, index, dc) in enumerate(powerlaws):
+            c = COLOURS[ii%len(COLOURS)]
             model = power_law(self.freqs, amp, index, dc)
-            plt.plot(self.freqs[1:], model[1:], 'r--')
+            plt.plot(self.freqs[1:], model[1:], ls='--', c=c,
+                     label=r"A=%.2g, $\alpha$=%.3g, DC=%.2g" % (amp, index,dc))
         plt.xlabel("Frequency (Hz)")
         plt.ylabel("Power")
         plt.xscale('log')
         plt.yscale('log')
-        plt.show()
+        plt.legend(loc='upper right', prop=dict(size='x-small'))
 
     def read_fft(self, count=-1):
         """Read 'count' powers from .fft file and return them.
@@ -363,21 +428,98 @@ def smearing_function(flo, fhi, ddm, bandpass=None):
 
 
 def main():
-    pfftfn = sys.argv[1]
-    pfft = PrestoFFT(pfftfn)
+    pfftfn = args.fftfn
+    pfft = PrestoFFT(pfftfn, maxfreq=args.max_freq)
 
-    fig = plt.figure()
-    pfft.plot(c='k', lw=0.5)
-    if len(sys.argv) > 2:
-        zapfn = sys.argv[2]
-        pfft.plot_zaplist(zapfn)
+    plparams = args.powerlaw
+    if args.do_fit:
+        powerlaw = pfft.fit_powers(freqlim=args.freq_lim)
+        print "Amplitude:", powerlaw['amp']
+        print "Index:", powerlaw['index']
+        print "DC offset:", powerlaw['dc']
+        plparams.append((powerlaw['amp'], powerlaw['index'], powerlaw['dc']))
+        write_powerlaw_to_file(powerlaw, pfftfn, outfn=(pfftfn+".plp"))
+    if args.do_plot:
+        fig = plt.figure()
+        pfft.plot(c='k', lw=0.5)
+        plt.xscale(args.xscale)
+        plt.yscale(args.yscale)
+        if args.zapfile is not None:
+            pfft.plot_zaplist(args.zapfile)
+        if plparams:
+            pfft.plot_power_fit(plparams)
+        if args.save_plot:
+            plt.savefig(pfftfn+".png") 
+        if args.show_plot:
+            def close(event):
+                if event.key in ('q','Q'):
+                    plt.close()
+            fig.canvas.mpl_connect("key_press_event", close)
+            plt.show()
 
-    def close(event):
-        if event.key in ('q','Q'):
-            plt.close()
-    fig.canvas.mpl_connect("key_press_event", close)
-    plt.show()
+
+def write_powerlaw_to_file(powerlaw, pfftfn, outfn):
+    with open(outfn, 'w') as ff:
+        ff.write("# Power law parameters for %s\n" % pfftfn)
+        ff.write("# Amplitude   Index   DC offset\n")
+        ff.write("%(amp)g\t%(index)g\t%(dc)g\n" % powerlaw)
+
+
+class PowerLawFromFile(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        plparams = getattr(namespace, self.dest)
+        with open(values, 'r') as ff:
+            for line in ff:
+                line = line.partition("#")[0].strip()
+                if not line:
+                    continue
+                split = line.split()
+                if len(split) != 3:
+                    raise ValueError("Each line in power law file must "
+                                     "contain 3 params (amp, index, dc). "
+                                     "%d params in:\n%s" % (len(split), line))
+                plparams.append(tuple([float(x) for x in split]))
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Work with PRESTO FFT files.")
+    parser.add_argument("--fit", dest='do_fit', action='store_true', \
+                        help="Include a power-law fit to the power spectrum "
+                             "when plotting.")
+    parser.add_argument("--no-plot", dest='do_plot', action='store_false', \
+                        help="Make plot of power spectrum.")
+    parser.add_argument("--save-plot", dest="save_plot", action='store_true', \
+                        help="Save plot to file. The figure will "
+                             "be saved to <fft fn>.png")
+    parser.add_argument("--no-show-plot", dest="show_plot", action='store_false', \
+                        help="Show plot of power spectrum.")
+    parser.add_argument("--fit-freq-lim", dest='freq_lim', type=float, \
+                        default=10.0,
+                        help="When fitting the power spectrum's red noise, only "
+                             "use frequencies less than this value. " 
+                             "(Default: minimum of 10 Hz and 1/DM smearing time)")
+    parser.add_argument("--powerlaw", dest='powerlaw', action='append', \
+                        type=float, nargs=3, default=[], \
+                        help="Parameters for power law to plot. Three "
+                             "parameters must be provided: amplitude index DC")
+    parser.add_argument("--pl-params", dest='powerlaw', action=PowerLawFromFile, \
+                        type=str, default=[], \
+                        help="File with parameters for power law to plot. Three "
+                             "parameters must be provided: amplitude index DC")
+    parser.add_argument("--xscale", type=str, dest='xscale',
+                        default='log',
+                        help="Matplotlib-style scaling type for the X-axis. "
+                             "(Default: log)")
+    parser.add_argument("--yscale", type=str, dest='yscale',
+                        default='log',
+                        help="Matplotlib-style scaling type for the Y-axis. "
+                             "(Default: log)")
+    parser.add_argument("-z", "--zapfile", type=str, dest='zapfile', \
+                        help="Zap file to show when plotting.")
+    parser.add_argument("--max-freq", dest="max_freq", type=float,
+                        help="Maximum frequency to plot. (Default: plot all)")
+    parser.add_argument("fftfn", type=str,
+                        help="PRESTO FFT file to use. The corresponding *.inf " \
+                             "file must be present.")
+    args = parser.parse_args()
     main()
