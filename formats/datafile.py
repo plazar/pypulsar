@@ -18,8 +18,8 @@ import numpy as np
 from astro_utils import sextant
 from astro_utils import protractor
 from astro_utils import calendar
-from formats import wapp
-from formats import psrfits
+#from pypulsar.formats import wapp
+from pypulsar.formats import psrfits
 
 COORDS_TABLE = "/homes/borgii/alfa/svn/workingcopy_PL/PALFA/miscellaneous/" + \
                 "PALFA_coords_table.txt"

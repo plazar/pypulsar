@@ -46,10 +46,9 @@ def get_mask(rfimask, startsamp, N):
         blockmask[:,rfimask.mask_zap_chans_per_int[blocknum]] = True
         mask[blocknums==blocknum] = blockmask
     return mask.T
-        
+       
 
-def main():
-    fn = args[0]
+def open_data_file(fn):
     if fn.endswith(".fil"):
         # Filterbank file
         filetype = "filterbank"
@@ -62,65 +61,108 @@ def main():
         raise ValueError("Cannot recognize data file type from "
                          "extension. (Only '.fits' and '.fil' "
                          "are supported.)")
+    return rawdatafile
 
+
+def get_data(rawdatafile, start, duration=None, nbins=None, mask=None):
+    """Return numpy data array.
+
+        Inputs:
+            rawdatafile: A data file as returned by 'open_data_files(...)'
+            start: The start of the waterfall plot (in s)
+            duration: The duration of the waterfall plot (in s)
+            nbins: The duration of the waterfall plot (in bins)
+            mask: An rfifind mask to use (Default: no masking)
+
+        Output:
+            data: A Spectra object.
+    """
     # Read data
-    start_bin = np.round(options.start/fil.tsamp).astype('int')
-    if options.nbins is None:
-        nbins = np.round(options.duration/fil.tsamp).astype('int')
-    else:
-        nbins = options.nbins
+    start_bin = np.round(start/rawdatafile.tsamp).astype('int')
+    if nbins is None:
+        if duration is None:
+            raise ValueError("At least one of 'duration' and " \
+                             "'nbins' must be provided!")
+        else:
+            nbins = np.round(duration/rawdatafile.tsamp).astype('int')
+    elif duration is not None:
+        warnings.warn("Both 'duration' and 'nbins' provided. Will use 'nbins'.")
     data = rawdatafile.get_spectra(start_bin, nbins)
-    if options.maskfile is not None:
-        rfimask = rfifind.rfifind(options.maskfile) 
-        mask = get_mask(rfimask, start_bin, nbins)
+    if mask is not None:
+        if isinstance(mask, rfifind.rfifind):
+            rfimask = mask
+        else:
+            rfimask = rfifind.rfifind(mask) 
+        datamask = get_mask(rfimask, start_bin, nbins)
         # Mask data
-        data = data.masked(mask, maskval='median-mid80')
+        data = data.masked(datamask, maskval='median-mid80')
+    return data
 
+
+def prepare_data(data, smooth=1, downsamp=1, dm=0, nsub=None, 
+                 subdm=None, scaleindep=False, noscale=False):
     # Subband data
-    if (options.nsub is not None) and (options.subdm is not None):
-        data.subband(options.nsub, options.subdm, padval='mean')
+    if (nsub is None):
+        nsub = data.numchans
+    if (subdm is None):
+        subdm = dm
+    data.subband(nsub, subdm, padval='mean')
 
     # Dedisperse
-    if options.dm:
-        data.dedisperse(options.dm, padval='mean')
+    if dm:
+        data.dedisperse(dm, padval='mean', trim=True)
 
     # Downsample
-    data.downsample(options.downsamp)
+    if downsamp > 1:
+        data.downsample(downsamp)
 
     # scale data
-    data = data.scaled(options.scaleindep)
+    if not noscale:
+        data = data.scaled(scaleindep)
     
     # Smooth
-    if options.width_bins > 1:
-        data.smooth(options.width_bins, padval='mean')
-    
-    # Ploting it up
-    fig = plt.figure()
-    fig.canvas.set_window_title("Frequency vs. Time")
-    ax = plt.axes((0.15, 0.15, 0.8, 0.7))
+    if smooth > 1:
+        data.smooth(smooth, padval='mean')
+    return data
+
+def plot_spectra(data, cmap='gist_yarg'):
     plt.imshow(data.data, aspect='auto', \
-                cmap=matplotlib.cm.cmap_d[options.cmap], \
+                cmap=matplotlib.cm.cmap_d[cmap], \
                 interpolation='nearest', origin='upper', \
                 extent=(data.starttime, data.starttime+data.numspectra*data.dt, \
                         data.freqs.min(), data.freqs.max()))
-    if options.show_cb:
+
+
+def plot_timeseries(data):
+    times = np.arange(0, data.numspectra)*data.dt + data.starttime
+    plt.plot(times, data.data.sum(axis=0), 'k-')
+
+def plot(data, cmap='gist_yarg', show_cb=False, sweep_dms=None, sweep_posns=None):
+    if sweep_dms is None:
+        sweep_dms = []
+    if sweep_posns is None:
+        sweep_posns = []
+
+    ax = plt.axes((0.15, 0.15, 0.8, 0.7))
+    plot_spectra(data, cmap=cmap)
+
+    if show_cb:
         cb = plt.colorbar()
         cb.set_label("Scaled signal intensity (arbitrary units)")
-
     plt.axis('tight')
 
     # Sweeping it up
-    for ii, sweep_dm in enumerate(options.sweep_dms):
+    for ii, sweep_dm in enumerate(sweep_dms):
         ddm = sweep_dm-data.dm
         delays = psr_utils.delay_from_DM(ddm, data.freqs)
         delays -= delays.min()
         
-        if options.sweep_posns is None:
+        if sweep_posns is None:
             sweep_posn = 0.0
-        elif len(options.sweep_posns) == 1:
-            sweep_posn = options.sweep_posns[0]
+        elif len(sweep_posns) == 1:
+            sweep_posn = sweep_posns[0]
         else:
-            sweep_posn = options.sweep_posns[ii]
+            sweep_posn = sweep_posns[ii]
         sweepstart = data.dt*data.numspectra*sweep_posn+data.starttime
         sty = SWEEP_STYLES[ii%len(SWEEP_STYLES)]
         plt.plot(delays+sweepstart, data.freqs, sty, lw=4, alpha=0.5)
@@ -128,7 +170,36 @@ def main():
     # Dressing it up
     plt.xlabel("Time")
     plt.ylabel("Observing frequency (MHz)")
-    plt.suptitle("Frequency vs. Time")
+    #plt.suptitle("Frequency vs. Time")
+    
+    sumax = plt.axes((0.15, 0.85, 0.8, 0.1), sharex=ax)
+    plot_timeseries(data)
+    plt.setp(sumax.get_xticklabels()+sumax.get_yticklabels(), visible=False)
+    plt.ylabel("Intensity")
+    plt.ticklabel_format(style='plain', useOffset=False)
+
+    plt.axis('tight')
+
+    return sumax, ax
+
+
+def main():
+    fn = args[0]
+    rawdatafile = open_data_file(fn)
+
+    if options.dm:
+        dmtime = psr_utils.delay_from_DM(options.dm, np.min(rawdatafile.freqs))
+
+    data = get_data(rawdatafile, start=options.start, duration=options.duration+dmtime,
+                    mask=options.maskfile)
+
+    data = prepare_data(data, options.width_bins, options.downsamp, options.dm,
+                        options.nsub, options.subdm, options.scaleindep)
+
+    # Ploting it up
+    fig = plt.figure()
+    fig.canvas.set_window_title("Frequency vs. Time")
+    plot(data, options.cmap, options.sweep_dms, options.sweep_posns) 
     fig.canvas.mpl_connect('key_press_event', \
             lambda ev: (ev.key in ('q','Q') and plt.close(fig)))
     plt.show()

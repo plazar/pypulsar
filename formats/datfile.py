@@ -7,7 +7,10 @@ Patrick Lazarus, June 16, 2009
 """
 
 import os.path
+
 import numpy as np
+import scipy.interpolate as interp
+
 import psr_utils
 import infodata
 import pulse
@@ -20,6 +23,7 @@ class Datfile:
     def __init__(self, datfn, dtype=DTYPE):
         self.datfn = datfn
         self.dtype = np.dtype(dtype)
+        self.bytes_per_sample = self.dtype.itemsize
         if self.datfn.endswith(".dat"):
             self.basefn = self.datfn[:-4]
             self.datfile = open(datfn, 'r')
@@ -41,8 +45,9 @@ class Datfile:
     def __str__(self):
         string_repr = "%s:\n" % self.origfn
         string_repr += "\tCurrent sample: %d\n" % self.currsample
-        string_repr += "\tCurrent desired MJD: %0.15f\n" % self.currmjd_desired
-        string_repr += "\tCurrent actual MJD: %0.15f\n" % self.currmjd_actual
+        if hasattr(self.infdata, 'epoch'):
+            string_repr += "\tCurrent desired MJD: %0.15f\n" % self.currmjd_desired
+            string_repr += "\tCurrent actual MJD: %0.15f\n" % self.currmjd_actual
         string_repr += "\tCurrent desired time: %0.9f\n" % self.currtime_desired
         string_repr += "\tCurrent actual time: %0.9" % self.currtime_actual
         return string_repr
@@ -60,20 +65,93 @@ class Datfile:
             return None
         else:
             self.currsample = new_curr_sample
-            self.currmjd_actual += self.infdata.dt * N / \
-                                    float(psr_utils.SECPERDAY)
+            if hasattr(self.infdata, 'epoch'):
+                self.currmjd_actual += self.infdata.dt * N / \
+                                        float(psr_utils.SECPERDAY)
             self.currtime_actual += self.infdata.dt * N
             return np.fromfile(self.datfile, dtype=self.dtype, count=N)
-        
+       
+    def __seek(self, N):
+        self.datfile.seek(N*self.bytes_per_sample)
+        self.currsample = N
+        if hasattr(self.infdata, 'epoch'):
+            self.currmjd_actual = self.infdata.dt * N / \
+                                        float(psr_utils.SECPERDAY)
+        self.currtime_actual = self.infdata.dt * N
         
     def __update_desired_time(self, T):
         """Private method:
             Update current desired time and MJD
         """
         self.currtime_desired += T
-        self.currmjd_desired += T / float(psr_utils.SECPERDAY)
+        if hasattr(self.infdata, 'epoch'):
+            self.currmjd_desired += T / float(psr_utils.SECPERDAY)
 
 
+    def get_baseline_spline(self, span=1.0):
+        """Get spline representation of baseline.
+            Split time series into blocks and calculate the median of
+            each block. interpolate between median values using
+            a spline.
+
+            Input:
+                span: The time span for blocks, in seconds (Default: 1s)
+            
+            Output:
+                spline: The spline object representing the baseline.
+        """
+        self.rewind()
+
+        istart = 0
+        block = self.read_Tseconds(span)
+        xx = []
+        meds = []
+        while block is not None:
+            iend = istart + len(block)
+            xx.append(0.5*(istart+iend))
+            meds.append(np.median(block))
+            istart = iend
+            block = self.read_Tseconds(span)
+    
+        spline = interp.InterpolatedUnivariateSpline(xx, meds, bbox=(0,iend))
+        return spline
+
+
+    def write_debaselined(self, span=1.0):
+        """Write time series with baseline removed.
+
+            Input:
+                span: The time span for blocks, in seconds (Default: 1s)
+            
+            Output:
+                outfn: The name of the output file.
+        """
+        outbase = "%s.debasline" % self.basefn 
+        spline = self.get_baseline_spline(span)
+        self.rewind()
+        data = self.read_all()
+        nout = len(data)-span/2.0/self.inf.dt
+        data = data[:nout]
+        xs = np.arange(nout)
+        baseline = spline(xs)
+        (data-baseline).tofile(outbase+".dat")
+
+        # Create inf file.
+        with open(self.inffn, 'r') as inffile, open(outbase+".inf", 'w') as outfile:
+            for line in inffile:
+                if not line.strip():
+                    continue
+                if line.startswith(" Data file name"):
+                    outfile.write(" Data file name without suffix          =  %s\n" % outbase)
+                elif line.startswith(" Number of bins "):
+                    outfile.write(" Number of bins in the time series      =  %d\n" % nout)
+                else:
+                    outfile.write(line)
+            outfile.write("    Baseline was removed with 'datafile.py' (by Patrick Lazarus) using a block duration of %g s\n" % span)
+                    
+        return outbase+'.dat'
+
+    
     def read_Nsamples(self, N):
         """Read N samples from datfile and return a numpy array
             of the data, or None if there aren't N samples of
@@ -85,6 +163,16 @@ class Datfile:
             self.__update_desired_time(N * self.infdata.dt)
         return data
 
+    def seek_to(self, T):
+        self.rewind()
+        # Compute number of samples to read
+        endsample = np.round((self.currtime_desired+T)/self.infdata.dt)
+        sample_num = int(endsample-self.currsample)
+        self.__seek(sample_num)
+        self.currtime_desired = T
+        if hasattr(self.infdata, 'epoch'):
+            self.currmjd_desired = self.infdata.epoch + T / float(psr_utils.SECPERDAY)
+        return sample_num
 
     def read_Tseconds(self, T):
         """Read T seconds worth of data from datfile and return
@@ -120,10 +208,11 @@ class Datfile:
         self.currtime_actual = 0.0
         # Desired current time (keep track of requests given in seconds)
         self.currtime_desired = 0.0
-        # Actual current MJD (incremented by integer number of samples)
-        self.currmjd_actual = self.infdata.epoch
-        # Desired current MJD (keep track of requests)
-        self.currmjd_desired = self.infdata.epoch
+        if hasattr(self.infdata, 'epoch'):
+            # Actual current MJD (incremented by integer number of samples)
+            self.currmjd_actual = self.infdata.epoch
+            # Desired current MJD (keep track of requests)
+            self.currmjd_desired = self.infdata.epoch
 
 
     def pulses(self, period_at_mjd, time_to_skip=0.0):
@@ -135,6 +224,8 @@ class Datfile:
             observation. (First pulse period after skip is
             still called pulse #1)
         """
+        if not hasattr(self.infdata, 'epoch'):
+            raise NotImplementedError("Cannot use 'pulses(...)' if there is no MJD in inf file")
         # Initialize
         self.rewind()
         if time_to_skip > 0.0:
