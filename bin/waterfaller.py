@@ -45,7 +45,7 @@ def get_mask(rfimask, startsamp, N):
         blockmask = np.zeros_like(mask[blocknums==blocknum])
         blockmask[:,rfimask.mask_zap_chans_per_int[blocknum]] = True
         mask[blocknums==blocknum] = blockmask
-    return mask.T
+    return mask.T[::-1]
        
 
 def open_data_file(fn):
