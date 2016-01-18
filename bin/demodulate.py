@@ -111,7 +111,9 @@ def main():
     status = 0
     totsamps = indat.inf.N
     startsamp = 0
-    
+    lastdsamp = 0
+    idrop = []
+    iadd = []
     while not last:
         igoodpoly = pcos.select_polyco(imjd, fmjd)
         pco = pcos.polycos[igoodpoly]
@@ -135,6 +137,27 @@ def main():
             #print "Data samp#: %d; dphase: %d; imjd: %05d; fmjd: %.15f; Rot#: %.6f; dRot: %.10f; PSR samp#: %.3f; diff: %.10f" % \
             #      (idatsamp, dphase, imjd, fmjd, new_rot, (new_rot-rot0), ipsrsamp, dsamp)
             if dsamp > 0.5:
+                steps = np.arange(0, SAMPSTEP)
+                fmjds = fmjd - steps*samp_in_day
+                print fmjd
+                print fmjds
+                print new_rot
+                rots = pco.rotation(imjd, fmjds)
+                print rots
+                ipsrsamps = (rots - rot0)*1000.0
+                print ipsrsamps
+                dsamps = (idatsamp-steps+dphase)-ipsrsamps
+                print dsamps
+                print dsamps <= 0.5
+                todrop = np.argmax(dsamps <= 0.5)
+                print todrop
+                idrop.append(idatsamp-(todrop-1))
+
+                # Interpolate to find sample that should be dropped
+                #slope = (dsamp-lastdsamp)/float(SAMPSTEP)
+                #sampsback = int(np.round((dsamp-0.5)/slope))
+                #idrop.append(idatsamp-sampsback)
+                #print dsamp, lastdsamp, SAMPSTEP, slope, sampsback, idatsamp
                 # Drop a sample
                 dphase -= 1
                 nremoved += 1
@@ -145,16 +168,21 @@ def main():
                 # And now the extra sample is a duplicate
                 outdata.append(data[idatsamp-1])
                 nadded += 1
+                # Interpolate to find where sample that should be added
+                slope = (dsamp-lastdsamp)/float(SAMPSTEP)
+                sampsback = int(np.round((dsamp+0.5)/slope))
+                iadd.append(idatsamp-sampsback)
             else:
                 outdata.append(data[idatsamp-1])
             #print "dphase: %.15f; Nadd: %d; Nremove: %d" % (dphase, nadded, nremoved)
-            fmjd += samp_in_day
+            fmjd += samp_in_day*SAMPSTEP
+            lastdsamp = dsamp
 
             # Show status
             newstatus = int(100.0*idatsamp/totsamps)
             if newstatus > status:
                 status = newstatus
-                sys.stdout.write(" %d %%\r")
+                sys.stdout.write(" %d %%\r" % status)
                 sys.stdout.flush()
         startsamp += nsamp
     sys.stdout.write("\nDone\n")
@@ -163,6 +191,14 @@ def main():
     outdata = np.array(outdata)
     outdata.astype('float32')
     outdata.tofile(args.datfile[:-4]+"_demod.dat")
+
+    with open('samples.txt', 'w') as ff:
+        ff.write("Indices of samples dropped:\n")
+        for dd in idrop:
+            ff.write("    %d\n" % dd)
+        ff.write("Indices of samples added:\n")
+        for aa in iadd:
+            ff.write("    %d\n" % aa)
 
 
 if __name__ == '__main__':
