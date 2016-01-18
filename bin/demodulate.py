@@ -2,7 +2,7 @@ import argparse
 import tempfile
 import os.path
 import types
-import time
+import sys
 
 import numpy as np
 
@@ -12,6 +12,9 @@ import psr_utils
 
 from pypulsar.formats import datfile
 from pypulsar import utils
+
+
+SAMPSTEP = 10
 
 
 def create_polycos_from_inf(par, inf):
@@ -89,11 +92,12 @@ def main():
     parfn = create_parfile(args.parfile, indat.inf)
     # Create polycos
     pcos = create_polycos_from_inf(parfn, indat.inf) 
-   
+
     outdata = []
     dphase = 0.0
     imjd = np.floor(indat.inf.epoch)
     fmjd = indat.inf.epoch % 1
+
     rot0 = pcos.get_rotation(imjd, fmjd)
     #print "MJD at file start: %.15f" % indat.inf.epoch
     #print "imjd: %05d; fmjd: %.15f" % (imjd, fmjd)
@@ -102,31 +106,58 @@ def main():
 
     nremoved = 0
     nadded = 0
-    for idatsamp in utils.show_progress(xrange(1, indat.inf.N+1), width=50, tot=indat.inf.N):
-        newday = (fmjd > 1.0)
-        imjd += newday
-        fmjd -= newday
+    last = False
+    mjdend = indat.inf.epoch+indat.inf.dt*indat.inf.N/psr_utils.SECPERDAY
+    status = 0
+    totsamps = indat.inf.N
+    startsamp = 0
+    
+    while not last:
+        igoodpoly = pcos.select_polyco(imjd, fmjd)
+        pco = pcos.polycos[igoodpoly]
+        pcoend = pco.TMID + pcos.validrange
+        nsamp = min(indat.inf.N, int((pcoend - (imjd+fmjd))*psr_utils.SECPERDAY/indat.inf.dt))
+        last = (pcoend > mjdend)
+        for idatsamp in xrange(startsamp, startsamp+nsamp, SAMPSTEP):
+            # Update integer and fractional part of MJD
+            # accounting for crossing over to a new day
+            newday = (fmjd > 1.0)
+            imjd += newday
+            fmjd -= newday
 
-        new_rot = pcos.get_rotation(imjd, fmjd)
-        ipsrsamp = (new_rot-rot0)*1000.0  # multiply by 1000 because period is 1000x sample time
-        dsamp = (idatsamp+dphase)-ipsrsamp
-        #print "Data samp#: %d; dphase: %d; imjd: %05d; fmjd: %.15f; Rot#: %.6f; dRot: %.10f; PSR samp#: %.3f; diff: %.10f" % \
-        #      (idatsamp, dphase, imjd, fmjd, new_rot, (new_rot-rot0), ipsrsamp, dsamp)
-        if dsamp > 0.5:
-            # Drop a sample
-            dphase -= 1
-            nremoved += 1
-        elif dsamp < -0.5:
-            # Add a sample
-            dphase += 1
-            outdata.append(data[idatsamp-1])
-            # And now the extra sample is a duplicate
-            outdata.append(data[idatsamp-1])
-            nadded += 1
-        else:
-            outdata.append(data[idatsamp-1])
-        #print "dphase: %.15f; Nadd: %d; Nremove: %d" % (dphase, nadded, nremoved)
-        fmjd += samp_in_day
+            # Compute the sample number in the pulsar's frame using the polycos
+            new_rot = pco.rotation(imjd, fmjd)
+            ipsrsamp = (new_rot-rot0)*1000.0  # multiply by 1000 because period
+                                              # is 1000x sample time
+            # Calculate difference in sample number in observation
+            # and pulsar frames
+            dsamp = (idatsamp+dphase)-ipsrsamp
+            #print "Data samp#: %d; dphase: %d; imjd: %05d; fmjd: %.15f; Rot#: %.6f; dRot: %.10f; PSR samp#: %.3f; diff: %.10f" % \
+            #      (idatsamp, dphase, imjd, fmjd, new_rot, (new_rot-rot0), ipsrsamp, dsamp)
+            if dsamp > 0.5:
+                # Drop a sample
+                dphase -= 1
+                nremoved += 1
+            elif dsamp < -0.5:
+                # Add a sample
+                dphase += 1
+                outdata.append(data[idatsamp-1])
+                # And now the extra sample is a duplicate
+                outdata.append(data[idatsamp-1])
+                nadded += 1
+            else:
+                outdata.append(data[idatsamp-1])
+            #print "dphase: %.15f; Nadd: %d; Nremove: %d" % (dphase, nadded, nremoved)
+            fmjd += samp_in_day
+
+            # Show status
+            newstatus = int(100.0*idatsamp/totsamps)
+            if newstatus > status:
+                status = newstatus
+                sys.stdout.write(" %d %%\r")
+                sys.stdout.flush()
+        startsamp += nsamp
+    sys.stdout.write("\nDone\n")
     print "Number of samples removed: %d" % nremoved
     print "Number of samples added: %d" % nadded
     outdata = np.array(outdata)
