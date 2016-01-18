@@ -105,14 +105,16 @@ def main():
     idrop = []
     iadd = []
 
-    sampstep = args.sampstep
+    sampstep = 1
+    last_add_drop = 0
     while not last:
         igoodpoly = pcos.select_polyco(imjd, fmjd)
         pco = pcos.polycos[igoodpoly]
         pcoend = pco.TMID + pcos.validrange
         nsamp = min(indat.inf.N, int((pcoend - (imjd+fmjd))*psr_utils.SECPERDAY/indat.inf.dt))
         last = (pcoend > mjdend)
-        for idatsamp in xrange(startsamp, startsamp+nsamp, sampstep):
+        idatsamp = startsamp
+        while idatsamp < (startsamp+nsamp):
             # Update integer and fractional part of MJD
             # accounting for crossing over to a new day
             newday = (fmjd > 1.0)
@@ -129,6 +131,8 @@ def main():
             if dsamp > 0.5:
                 if sampstep == 1:
                     idrop.append(idatsamp)
+                    sampstep = int(0.1*(idatsamp - last_add_drop))
+                    last_add_drop = idatsamp
                 else:
                     steps = np.arange(0, sampstep)
                     fmjds = fmjd - steps*samp_in_day
@@ -136,13 +140,18 @@ def main():
                     ipsrsamps = (rots - rot0)*1000.0
                     dsamps = (idatsamp-steps+dphase)-ipsrsamps
                     todrop = np.argmax(dsamps <= 0.5)
-                    idrop.append(idatsamp-(todrop-1))
+                    dropsamp = idatsamp-(todrop-1)
+                    idrop.append(dropsamp)
+                    sampstep = int(0.1*(dropsamp - last_add_drop))
+                    last_add_drop = dropsamp
                 # Drop a sample
                 dphase -= 1
                 nremoved += 1
             elif dsamp < -0.5:
                 if sampstep == 1:
                     iadd.append(idatsamp)
+                    sampstep = int(0.1*(idatsamp - last_add_drop))
+                    last_add_drop = idatsamp
                 else:
                     steps = np.arange(0, sampstep)
                     fmjds = fmjd - steps*samp_in_day
@@ -150,12 +159,18 @@ def main():
                     ipsrsamps = (rots - rot0)*1000.0
                     dsamps = (idatsamp-steps+dphase)-ipsrsamps
                     toadd = np.argmax(dsamps >= -0.5)
-                    iadd.append(idatsamp-(toadd-1))
+                    addsamp = idatsamp-(toadd-1)
+                    iadd.append(addsamp)
+                    sampstep = int(0.1*(addsamp - last_add_drop))
+                    last_add_drop = addsamp
                 # Add a sample
                 dphase += 1
                 nadded += 1
             else:
                 pass
+            print "Next step size is %d samples" % sampstep
+            # Prepare for next iteration
+            idatsamp += sampstep
             fmjd += samp_in_day * sampstep
 
             # Show status
@@ -194,20 +209,6 @@ if __name__ == '__main__':
     parser.add_argument("datfile",
                         help="PRESTO *.dat file to demodulate. (Corresponding "
                              "*.inf file must be in same directory).")
-    parser.add_argument("-s", "--step-size", dest='sampstep',
-                        type=int, default=1,
-                        help="Coarse step size (in samples) to use when "
-                             "initially passing through the data, to "
-                             "reduce run time. Value should be less "
-                             "interval between adding/removing a sample."
-                             "Note that, if a "
-                             "discrepancy between observed time sample "
-                             "and pulsar-frame sample is more than 0.5 "
-                             "bins, repeat the interval with finer "
-                             "resolution to identify the exact sample "
-                             "that should be added/removed. (Default: 1 "
-                             "i.e. don't bother with the initial coarse "
-                             "steps)")
     parser.add_argument("-f", "--parfile", dest='parfile', required=True,
                         help="Parfile to use to de-modulate orbit.")
     args = parser.parse_args()
