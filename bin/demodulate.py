@@ -11,10 +11,6 @@ import infodata
 import psr_utils
 
 from pypulsar.formats import datfile
-from pypulsar import utils
-
-
-SAMPSTEP = 10
 
 
 def create_polycos_from_inf(par, inf):
@@ -86,23 +82,18 @@ def create_parfile(inparfn, inf):
 
 def main():
     indat = datfile.Datfile(args.datfile)
-    data = indat.read_all()
     # Construct parfile to use based on input parfile
     # (folding frequency is 1/1000 of sampling time)
     parfn = create_parfile(args.parfile, indat.inf)
     # Create polycos
     pcos = create_polycos_from_inf(parfn, indat.inf) 
 
-    outdata = []
     dphase = 0.0
     imjd = np.floor(indat.inf.epoch)
-    fmjd = indat.inf.epoch % 1
+    fmjd = np.float128(indat.inf.epoch) % 1
 
     rot0 = pcos.get_rotation(imjd, fmjd)
-    #print "MJD at file start: %.15f" % indat.inf.epoch
-    #print "imjd: %05d; fmjd: %.15f" % (imjd, fmjd)
-    #print "Rotation at file start: %.15f" % rot0
-    samp_in_day = indat.inf.dt/psr_utils.SECPERDAY
+    samp_in_day = np.float128(indat.inf.dt)/psr_utils.SECPERDAY
 
     nremoved = 0
     nadded = 0
@@ -111,16 +102,17 @@ def main():
     status = 0
     totsamps = indat.inf.N
     startsamp = 0
-    lastdsamp = 0
     idrop = []
     iadd = []
+
+    sampstep = args.sampstep
     while not last:
         igoodpoly = pcos.select_polyco(imjd, fmjd)
         pco = pcos.polycos[igoodpoly]
         pcoend = pco.TMID + pcos.validrange
         nsamp = min(indat.inf.N, int((pcoend - (imjd+fmjd))*psr_utils.SECPERDAY/indat.inf.dt))
         last = (pcoend > mjdend)
-        for idatsamp in xrange(startsamp, startsamp+nsamp, SAMPSTEP):
+        for idatsamp in xrange(startsamp, startsamp+nsamp, sampstep):
             # Update integer and fractional part of MJD
             # accounting for crossing over to a new day
             newday = (fmjd > 1.0)
@@ -134,49 +126,37 @@ def main():
             # Calculate difference in sample number in observation
             # and pulsar frames
             dsamp = (idatsamp+dphase)-ipsrsamp
-            #print "Data samp#: %d; dphase: %d; imjd: %05d; fmjd: %.15f; Rot#: %.6f; dRot: %.10f; PSR samp#: %.3f; diff: %.10f" % \
-            #      (idatsamp, dphase, imjd, fmjd, new_rot, (new_rot-rot0), ipsrsamp, dsamp)
             if dsamp > 0.5:
-                steps = np.arange(0, SAMPSTEP)
-                fmjds = fmjd - steps*samp_in_day
-                print fmjd
-                print fmjds
-                print new_rot
-                rots = pco.rotation(imjd, fmjds)
-                print rots
-                ipsrsamps = (rots - rot0)*1000.0
-                print ipsrsamps
-                dsamps = (idatsamp-steps+dphase)-ipsrsamps
-                print dsamps
-                print dsamps <= 0.5
-                todrop = np.argmax(dsamps <= 0.5)
-                print todrop
-                idrop.append(idatsamp-(todrop-1))
-
-                # Interpolate to find sample that should be dropped
-                #slope = (dsamp-lastdsamp)/float(SAMPSTEP)
-                #sampsback = int(np.round((dsamp-0.5)/slope))
-                #idrop.append(idatsamp-sampsback)
-                #print dsamp, lastdsamp, SAMPSTEP, slope, sampsback, idatsamp
+                if sampstep == 1:
+                    idrop.append(idatsamp)
+                else:
+                    steps = np.arange(0, sampstep)
+                    fmjds = fmjd - steps*samp_in_day
+                    rots = pco.rotation(imjd, fmjds)
+                    ipsrsamps = (rots - rot0)*1000.0
+                    dsamps = (idatsamp-steps+dphase)-ipsrsamps
+                    todrop = np.argmax(dsamps <= 0.5)
+                    idrop.append(idatsamp-(todrop-1))
                 # Drop a sample
                 dphase -= 1
                 nremoved += 1
             elif dsamp < -0.5:
+                if sampstep == 1:
+                    iadd.append(idatsamp)
+                else:
+                    steps = np.arange(0, sampstep)
+                    fmjds = fmjd - steps*samp_in_day
+                    rots = pco.rotation(imjd, fmjds)
+                    ipsrsamps = (rots - rot0)*1000.0
+                    dsamps = (idatsamp-steps+dphase)-ipsrsamps
+                    toadd = np.argmax(dsamps >= -0.5)
+                    iadd.append(idatsamp-(toadd-1))
                 # Add a sample
                 dphase += 1
-                outdata.append(data[idatsamp-1])
-                # And now the extra sample is a duplicate
-                outdata.append(data[idatsamp-1])
                 nadded += 1
-                # Interpolate to find where sample that should be added
-                slope = (dsamp-lastdsamp)/float(SAMPSTEP)
-                sampsback = int(np.round((dsamp+0.5)/slope))
-                iadd.append(idatsamp-sampsback)
             else:
-                outdata.append(data[idatsamp-1])
-            #print "dphase: %.15f; Nadd: %d; Nremove: %d" % (dphase, nadded, nremoved)
-            fmjd += samp_in_day*SAMPSTEP
-            lastdsamp = dsamp
+                pass
+            fmjd += samp_in_day * sampstep
 
             # Show status
             newstatus = int(100.0*idatsamp/totsamps)
@@ -188,17 +168,25 @@ def main():
     sys.stdout.write("\nDone\n")
     print "Number of samples removed: %d" % nremoved
     print "Number of samples added: %d" % nadded
-    outdata = np.array(outdata)
-    outdata.astype('float32')
-    outdata.tofile(args.datfile[:-4]+"_demod.dat")
 
-    with open('samples.txt', 'w') as ff:
-        ff.write("Indices of samples dropped:\n")
-        for dd in idrop:
-            ff.write("    %d\n" % dd)
-        ff.write("Indices of samples added:\n")
-        for aa in iadd:
-            ff.write("    %d\n" % aa)
+    samps = np.concatenate((idrop, iadd)).astype('int32')
+    isdrops = np.zeros_like(samps, dtype='int8')
+    isdrops[:len(idrop)] = 1
+    isort = np.argsort(samps)
+    samps = samps[isort]
+    isdrops = isdrops[isort]
+
+    indat.rewind()  # Rewind file, just in case
+    with open(args.datfile[:-4]+"_demod.dat", 'w') as outff:
+        for ind, isdrop in zip(samps, isdrops):
+            data = indat.read_to(ind)
+            if isdrop:
+                data[:-1].tofile(outff)  # drop last sample
+            else:
+                data.tofile(outff)
+                data[-1:].tofile(outff)  # duplicate last sample
+        data = indat.read_to(-1)  # Read rest of file
+        data.tofile(outff)
 
 
 if __name__ == '__main__':
@@ -206,6 +194,20 @@ if __name__ == '__main__':
     parser.add_argument("datfile",
                         help="PRESTO *.dat file to demodulate. (Corresponding "
                              "*.inf file must be in same directory).")
+    parser.add_argument("-s", "--step-size", dest='sampstep',
+                        type=int, default=1,
+                        help="Coarse step size (in samples) to use when "
+                             "initially passing through the data, to "
+                             "reduce run time. Value should be less "
+                             "interval between adding/removing a sample."
+                             "Note that, if a "
+                             "discrepancy between observed time sample "
+                             "and pulsar-frame sample is more than 0.5 "
+                             "bins, repeat the interval with finer "
+                             "resolution to identify the exact sample "
+                             "that should be added/removed. (Default: 1 "
+                             "i.e. don't bother with the initial coarse "
+                             "steps)")
     parser.add_argument("-f", "--parfile", dest='parfile', required=True,
                         help="Parfile to use to de-modulate orbit.")
     args = parser.parse_args()
