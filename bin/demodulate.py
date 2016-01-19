@@ -168,7 +168,6 @@ def main():
                 nadded += 1
             else:
                 pass
-            print "Next step size is %d samples" % sampstep
             # Prepare for next iteration
             idatsamp += sampstep
             fmjd += samp_in_day * sampstep
