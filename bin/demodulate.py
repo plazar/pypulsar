@@ -14,6 +14,9 @@ from pypulsar.formats import datfile
 from pypulsar import utils
 
 
+SAMPSTEP = 10
+
+
 def create_polycos_from_inf(par, inf):
     """A convenience function to create polycos for the observation
         with info in the given *.inf file.
@@ -108,14 +111,14 @@ def main():
     status = 0
     totsamps = indat.inf.N
     startsamp = 0
-
+    
     while not last:
         igoodpoly = pcos.select_polyco(imjd, fmjd)
         pco = pcos.polycos[igoodpoly]
         pcoend = pco.TMID + pcos.validrange
         nsamp = min(indat.inf.N, int((pcoend - (imjd+fmjd))*psr_utils.SECPERDAY/indat.inf.dt))
         last = (pcoend > mjdend)
-        for idatsamp in xrange(startsamp, startsamp+nsamp):
+        for idatsamp in xrange(startsamp, startsamp+nsamp, SAMPSTEP):
             # Update integer and fractional part of MJD
             # accounting for crossing over to a new day
             newday = (fmjd > 1.0)
