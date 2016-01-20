@@ -105,16 +105,22 @@ def main():
     idrop = []
     iadd = []
 
-    sampstep = 1
-    last_add_drop = 0
+    idatsamp = 0
+    igoodpoly = pcos.select_polyco(imjd, fmjd)
     while not last:
-        igoodpoly = pcos.select_polyco(imjd, fmjd)
         pco = pcos.polycos[igoodpoly]
         pcoend = pco.TMID + pcos.validrange
-        nsamp = min(indat.inf.N, int((pcoend - (imjd+fmjd))*psr_utils.SECPERDAY/indat.inf.dt))
+        #print "New Polycos! Poly index: %d, sample: %d, MJD: %.15f, " \
+        #      "valid until: %.15f, Time: %.5f" %\
+        #      (igoodpoly, idatsamp, (imjd+fmjd), pcoend, idatsamp*indat.inf.dt)
+        sampstep = 1
+        last_add_drop = startsamp
+        nsamp = min(indat.inf.N-startsamp,
+                    int((pcoend - (imjd+fmjd))*psr_utils.SECPERDAY/indat.inf.dt))
         last = (pcoend > mjdend)
-        idatsamp = startsamp
+        #idatsamp = startsamp
         while idatsamp < (startsamp+nsamp):
+            #print idatsamp, sampstep
             # Update integer and fractional part of MJD
             # accounting for crossing over to a new day
             newday = (fmjd > 1.0)
@@ -168,7 +174,11 @@ def main():
                 nadded += 1
             else:
                 pass
+            if sampstep < 1:
+                sampstep = 1
             # Prepare for next iteration
+            if (idatsamp+sampstep) > (startsamp+nsamp):
+                sampstep = (startsamp+nsamp)-idatsamp
             idatsamp += sampstep
             fmjd += samp_in_day * sampstep
 
@@ -179,6 +189,7 @@ def main():
                 sys.stdout.write(" %d %%\r" % status)
                 sys.stdout.flush()
         startsamp += nsamp
+        igoodpoly += 1
     sys.stdout.write("\nDone\n")
     print "Number of samples removed: %d" % nremoved
     print "Number of samples added: %d" % nadded
