@@ -108,8 +108,7 @@ def main():
     status = 0
     totsamps = indat.inf.N
     startsamp = 0
-    idrop = []
-    iadd = []
+
     while not last:
         igoodpoly = pcos.select_polyco(imjd, fmjd)
         pco = pcos.polycos[igoodpoly]
@@ -130,13 +129,12 @@ def main():
             # Calculate difference in sample number in observation
             # and pulsar frames
             dsamp = (idatsamp+dphase)-ipsrsamp
-            print "Data samp#: %d; dphase: %d; imjd: %05d; fmjd: %.15f; Rot#: %.6f; dRot: %.10f; PSR samp#: %.3f; diff: %.10f" % \
-                  (idatsamp, dphase, imjd, fmjd, new_rot, (new_rot-rot0), ipsrsamp, dsamp)
+            #print "Data samp#: %d; dphase: %d; imjd: %05d; fmjd: %.15f; Rot#: %.6f; dRot: %.10f; PSR samp#: %.3f; diff: %.10f" % \
+            #      (idatsamp, dphase, imjd, fmjd, new_rot, (new_rot-rot0), ipsrsamp, dsamp)
             if dsamp > 0.5:
                 # Drop a sample
                 dphase -= 1
                 nremoved += 1
-                idrop.append(idatsamp)
             elif dsamp < -0.5:
                 # Add a sample
                 dphase += 1
@@ -144,7 +142,6 @@ def main():
                 # And now the extra sample is a duplicate
                 outdata.append(data[idatsamp-1])
                 nadded += 1
-                iadd.append(idatsamp)
             else:
                 outdata.append(data[idatsamp-1])
             #print "dphase: %.15f; Nadd: %d; Nremove: %d" % (dphase, nadded, nremoved)
@@ -163,14 +160,6 @@ def main():
     outdata = np.array(outdata)
     outdata.astype('float32')
     outdata.tofile(args.datfile[:-4]+"_demod.dat")
-
-    with open('samples.txt', 'w') as ff:
-        ff.write("Indices of samples dropped:\n")
-        for isamp in idrop:
-            ff.write("    %d\n" % isamp)
-        ff.write("Indices of samples added:\n")
-        for isamp in iadd:
-            ff.write("    %d\n" % isamp)
 
 
 if __name__ == '__main__':
