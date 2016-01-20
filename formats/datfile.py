@@ -17,7 +17,8 @@ import pulse
 
 # Define constants and default values
 DTYPE = 'float32'       # binary data in PRESTO's .dat files 
-                        #   is stored as 32-bit floats
+                        # is stored as 32-bit floats
+
 
 class Datfile:
     def __init__(self, datfn, dtype=DTYPE):
@@ -51,7 +52,6 @@ class Datfile:
         string_repr += "\tCurrent desired time: %0.9f\n" % self.currtime_desired
         string_repr += "\tCurrent actual time: %0.9" % self.currtime_actual
         return string_repr
-
 
     def __read(self, N):
         """Private method:
@@ -87,6 +87,20 @@ class Datfile:
         if hasattr(self.infdata, 'epoch'):
             self.currmjd_desired += T / float(psr_utils.SECPERDAY)
 
+    def read_to(self, N):
+        """Read until sample N from current sample.
+
+            Input:
+                N: Sample to read to (if N==-1, read to the end of the file.)
+
+            Output:
+                data: data from current sample up to N.
+        """
+        if N == -1:
+            numtoread = self.inf.N - self.currsample
+        else:
+            numtoread = N - self.currsample
+        return self.read_Nsamples(numtoread)
 
     def get_baseline_spline(self, span=1.0):
         """Get spline representation of baseline.
@@ -115,7 +129,6 @@ class Datfile:
     
         spline = interp.InterpolatedUnivariateSpline(xx, meds, bbox=(0,iend))
         return spline
-
 
     def write_debaselined(self, span=1.0):
         """Write time series with baseline removed.
@@ -151,7 +164,6 @@ class Datfile:
                     
         return outbase+'.dat'
 
-    
     def read_Nsamples(self, N):
         """Read N samples from datfile and return a numpy array
             of the data, or None if there aren't N samples of
