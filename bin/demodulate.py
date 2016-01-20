@@ -82,6 +82,16 @@ def create_parfile(inparfn, inf):
 
 def main():
     indat = datfile.Datfile(args.datfile)
+
+    if args.outname is None:
+        outname = indat.basefn
+    else:
+        outname = args.outname
+    if os.path.exists(outname+".dat") and not args.force:
+        raise ValueError("Output file (%s) already exists!" % (outname+".dat"))
+    if os.path.exists(outname+".inf") and not args.force:
+        raise ValueError("Output file (%s) already exists!" % (outname+".inf"))
+
     # Construct parfile to use based on input parfile
     # (folding frequency is 1/1000 of sampling time)
     parfn = create_parfile(args.parfile, indat.inf)
@@ -110,17 +120,12 @@ def main():
     while not last:
         pco = pcos.polycos[igoodpoly]
         pcoend = pco.TMID + pcos.validrange
-        #print "New Polycos! Poly index: %d, sample: %d, MJD: %.15f, " \
-        #      "valid until: %.15f, Time: %.5f" %\
-        #      (igoodpoly, idatsamp, (imjd+fmjd), pcoend, idatsamp*indat.inf.dt)
         sampstep = 1
         last_add_drop = startsamp
         nsamp = min(indat.inf.N-startsamp,
                     int((pcoend - (imjd+fmjd))*psr_utils.SECPERDAY/indat.inf.dt))
         last = (pcoend > mjdend)
-        #idatsamp = startsamp
         while idatsamp < (startsamp+nsamp):
-            #print idatsamp, sampstep
             # Update integer and fractional part of MJD
             # accounting for crossing over to a new day
             newday = (fmjd > 1.0)
@@ -202,7 +207,7 @@ def main():
     isdrops = isdrops[isort]
 
     indat.rewind()  # Rewind file, just in case
-    with open(args.datfile[:-4]+"_demod.dat", 'w') as outff:
+    with open(outname+".dat", 'w') as outff:
         for ind, isdrop in zip(samps, isdrops):
             data = indat.read_to(ind)
             if isdrop:
@@ -212,6 +217,9 @@ def main():
                 data[-1:].tofile(outff)  # duplicate last sample
         data = indat.read_to(-1)  # Read rest of file
         data.tofile(outff)
+    
+    indat.inf.deorbited = True
+    indat.inf.to_file(outname+".inf")
 
 
 if __name__ == '__main__':
@@ -221,5 +229,11 @@ if __name__ == '__main__':
                              "*.inf file must be in same directory).")
     parser.add_argument("-f", "--parfile", dest='parfile', required=True,
                         help="Parfile to use to de-modulate orbit.")
+    parser.add_argument("-o", "--outname", dest='outname', default=None,
+                        help="Base name (i.e. no extension) of the output "
+                             "time series file. (Default: <input base name>_demod)")
+    parser.add_argument("--force", dest='force', action='store_true',
+                        help="Overwrite any existing files with names of "
+                             "output files. (Default: Don't)")
     args = parser.parse_args()
     main()
