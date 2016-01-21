@@ -17,11 +17,12 @@ import sys
 import argparse
 
 import pyslalib.slalib as slalib
-import pyfits
 import numpy as np
 import psr_utils
 from pypulsar.utils.astro import protractor
 from pypulsar.formats import spectra
+import astropy.io.fits as pyfits 
+import memory
 
 # Regular expression for parsing DATE-OBS card's format.
 date_obs_re = re.compile(r"^(?P<year>[0-9]{4})-(?P<month>[0-9]{2})-" \
@@ -63,7 +64,7 @@ class PsrfitsFile(object):
         self.nsubints = self.specinfo.num_subint[0]
         self.freqs = self.fits['SUBINT'].data[0]['DAT_FREQ'] 
         self.frequencies = self.freqs # Alias
-        self.tsamp = self.dt 
+        self.tsamp = self.specinfo.dt 
 
     def read_subint(self, isub, apply_weights=True, apply_scales=True, \
                     apply_offsets=True):
@@ -153,7 +154,6 @@ class PsrfitsFile(object):
         skip = startsamp - (startsub*self.nsamp_per_subint)
         endsub = int((startsamp+N)/self.nsamp_per_subint)
         trunc = ((endsub+1)*self.nsamp_per_subint) - (startsamp+N)
-        
         # Read data
         data = []
         for isub in xrange(startsub, endsub+1):
@@ -162,7 +162,7 @@ class PsrfitsFile(object):
             data = np.concatenate(data)
         else:
             data = np.array(data).squeeze()
-
+        data = np.transpose(data)
         # Truncate data to desired interval
         if trunc > 0:
             data = data[:, skip:-trunc]
@@ -170,7 +170,6 @@ class PsrfitsFile(object):
             data = data[:, skip:]
         else:
             raise ValueError("Number of bins to truncate is negative: %d" % trunc)
-    
         if not self.specinfo.need_flipband:
             # for psrfits module freqs go from low to high.
             # spectra module expects high frequency first.
@@ -178,7 +177,6 @@ class PsrfitsFile(object):
             freqs = self.freqs[::-1]
         else:
             freqs = self.freqs 
-
         return spectra.Spectra(freqs, self.tsamp, data, \
                                starttime=self.tsamp*startsamp, dm=0)
 
