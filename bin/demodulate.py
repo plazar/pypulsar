@@ -222,6 +222,7 @@ def main():
     
     indat.inf.deorbited = True
     indat.inf.to_file(outname+".inf")
+    os.remove(parfn)
 
 
 if __name__ == '__main__':
