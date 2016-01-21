@@ -225,10 +225,14 @@ def main():
         # Ensure file has an even number of samples, to facilitate running realfft
         if (len(data) + nwritten) % 2:
             data[:-1].tofile(outff)
+            nwritten += len(data)-1
         else:
             data.tofile(outff)
-    
+            nwritten += len(data)
+
+    # Fix inf data
     indat.inf.deorbited = True
+    indat.inf.N = nwritten
     indat.inf.to_file(outname+".inf")
     os.remove(parfn)
 
