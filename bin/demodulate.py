@@ -209,16 +209,24 @@ def main():
     isdrops = isdrops[isort]
 
     indat.rewind()  # Rewind file, just in case
+    nwritten = 0
     with open(outname+".dat", 'w') as outff:
         for ind, isdrop in zip(samps, isdrops):
             data = indat.read_to(ind)
             if isdrop:
                 data[:-1].tofile(outff)  # drop last sample
+                nwritten += len(data[:-1])
             else:
                 data.tofile(outff)
                 data[-1:].tofile(outff)  # duplicate last sample
+                nwritten += len(data)+1
         data = indat.read_to(-1)  # Read rest of file
-        data.tofile(outff)
+
+        # Ensure file has an even number of samples, to facilitate running realfft
+        if (len(data) + nwritten) % 2:
+            data[:-1].tofile(outff)
+        else:
+            data.tofile(outff)
     
     indat.inf.deorbited = True
     indat.inf.to_file(outname+".inf")
