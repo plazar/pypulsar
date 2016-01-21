@@ -86,7 +86,7 @@ def main():
     indat = datfile.Datfile(args.datfile)
 
     if args.outname is None:
-        outname = indat.basefn
+        outname = indat.basefn+"_demod"
     else:
         outname = args.outname
     if os.path.exists(outname+".dat") and not args.force:
